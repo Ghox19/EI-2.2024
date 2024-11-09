@@ -1,0 +1,340 @@
+# Actividad 2
+
+Integrantes: 
+
+* Nicolás García
+* Gonzalo Moncada
+* Ignacio Lara
+
+
+Carga de librerías
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggpubr)
+```
+
+## Pregunta 1
+
+El Comité Olímpico cree que el mejor tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento era inferior a 14,3 segundos. ¿Soportan los datos esta afirmación?
+
+Carga de los datos a partir del archivo csv.
+```{r}
+datos <- read.csv2("EP02 Datos.csv")
+```
+
+Como en este caso, se pregunta acerca de los atletas de raza negra, se procede a
+eliminar de la muestra los datos que correspondan a otras razas.
+
+
+
+```{r}
+muestra <- datos %>% 
+  filter(Raza == "Negra") %>%
+  select(-Posterior)
+
+print(muestra)
+```
+
+Como el estadístico a analizar es la media de los atletas previo a competir,
+se decide realizar la prueba T de Student, para una muestra. Para esto, se deben 
+cumplir los siguientes requerimientos:
+
+* Las observaciones son independientes entre sí.
+* Las observaciones provienen de una distribución cercana a la normal.
+
+Adicionalmente, se escoge un nivel de significancia del 0.05 por convención.
+Para el primer requisito, debido a que los datos trabajados son las medias de
+los mejores tiempos para diferentes atleatas, es seguro asumir que las
+observaciones son independientes entre sí.
+
+Para verificar que las observaciones provienen de una distribución cercana a la
+normal, y la cantidad de datos es menor a 5000, se procede a realizar el test de
+Shapiro-Wilk.
+
+
+```{r}
+normalidad <- shapiro.test(muestra$Previo)
+
+print(normalidad)
+
+# Crear el gráfico Q-Q
+datos_grafico <- data.frame(muestra.Previo = muestra$Previo)
+g <- ggqqplot(datos_grafico, x = "muestra.Previo", color = "SteelBlue")
+print(g)
+```
+
+Para estos datos, el test de Shapiro entrega un p-value de 0.6631, mucho más
+alto que nuestro nivel de significancia. Por ende, se puede concluir que los
+datos sí provienen de una distribución cercana a la normal, esto tambien observable en el grafico Q-Q presentado.
+
+Para la prueba de hipótesis que responde a nuestra pregunta, se determinan las
+siguientes hipótesis
+
+* H0: El mejor tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento es igual a 14.3
+
+* Ha: El mejor tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento es inferior a 14.3
+
+Matemáticamente, siendo u la media del mejor tiempo medio de los atletas de raza negra antes de ingresar al programa de entrenamiento:
+* H0: u = 14.3
+* Ha: u < 14.3
+
+```{r}
+n <- length(muestra)
+grados_libertad <- n - 1
+
+valor_nulo <- 14.3
+
+alfa <- 0.05
+
+media <- mean(muestra$Previo)
+cat("Media = ", media, "\n", sep="")
+
+des_vest <- sd(muestra$Previo)
+
+error_est <- des_vest / sqrt(n)
+
+t <- (media - valor_nulo) / error_est
+
+p <- pt(t, df=grados_libertad, lower.tail = TRUE)
+cat("p-value = ", p, "\n", sep="")
+
+t_critico <- qt(alfa, df=grados_libertad, lower.tail = FALSE)
+superior <- media + t_critico * error_est
+cat("Intervalo de confianza = (-Inf, ", superior, "]\n", sep="")
+prueba <- t.test(muestra$Previo, alternative="less", mu=valor_nulo, conf.level = 1 - alfa)
+print(prueba)
+
+```
+En esta pregunta, se realizaron dos tests de Student. El primero, realizándolo
+a mano, y el segundo con la función integrada directamente en R. Aunque es
+notable mencionar que los p-values obtenidos son diferentes, esto es debido a 
+que la función t.test de R aplica la corrección de Welch. A pesar de la
+diferencia, ambos test revelaron un p-valor mayor que el nivel de significancia
+escogido, de 0.05, por lo que se falla en rechazar la hipótesis nula en favor
+de la hipótesis alternativa. Por ende, no hay suficientes datos para asegurar
+que la media del mejor tiempo de los atletas de raza negra es menor que 14.3.
+
+## Pregunta 2
+
+¿Sugieren los datos que la mejor marca de los atletas de raza blanca se reduce en promedio más de 3,4 segundos tras el entrenamiento?
+
+Para esta pregunta, se va a utilizar la misma metodología que en la sección
+anterior, por lo que las descripciones serán más breves, sin embargo, es 
+importante destacar que para este caso, se aprecian dos muestras con datos
+pareados. Debido a esto, el método a utilizar es el T de Student para este tipo
+de problema, con un nivel de significancia de 0.05. No varía mucho de una prueba de Student normal, pues el único
+cambio es que se utiliza la diferencia entre las dos muestras.
+
+
+En primer lugar, se separan los datos a utilizar del resto de la muestra, y se
+calcula la diferencia entre el mejor tiempo previo y el posterior, para su uso
+en la prueba.
+
+```{r}
+muestra_Blanca <- datos %>% 
+  filter(Raza == "Blanca") %>%
+  mutate(diferencia = Previo - Posterior)
+
+print(muestra_Blanca)
+```
+
+Recordando los requerimientos, ya se mencionó que los datos están pareados, y,
+al igual que en la sección anterior, es seguro asumir que los datos son
+independientes al provenir de diferentes atletas.
+
+Por último, sólo falta determinar si la muestra viene de una distribución
+similar a la normal.
+
+
+```{r}
+normalidad <- shapiro.test(muestra_Blanca$diferencia)
+
+print(normalidad)
+
+# Grafico
+datos_grafico <- data.frame(muestra.Diferencia = muestra_Blanca$diferencia)
+g <- ggqqplot(datos_grafico, x = "muestra.Diferencia", color = "SteelBlue")
+print(g)
+```
+El p-value, nuevamente es superior al nivel de significancia escogido, aunque
+sería prudente tener cuidado al sacar conclusiones, pues no tan lejano como
+en la pregunta 1, ademas de esto se puede observar graficamente como sigue la distribucion normal.
+
+Con los requerimientos verificados, se determinan las hipótesis a probar.
+
+* H0: La diferencia entre el mejor tiempo previo y el mejor tiempo posterior
+es de 3.4
+* Ha: La diferencia entre el mejor tiempo previo y el mejor tiempo posterior es
+mayor que 3.4
+
+En términos matemáticos, con u = diferencia entre mejor tiempo previo y mejor
+tiempo posterior.
+
+* H0: u = 3.4
+* Ha: u > 3.4
+
+Finalmente, se aplica el test de student.
+
+```{r}
+valor_nulo_2 <- 3.4
+
+alfa = 0.05
+
+prueba_2 <- t.test(x = muestra_Blanca$Previo, y = muestra_Blanca$Posterior, paired = TRUE, alternative = "greater", mu = valor_nulo_2, conf.level = 1 - alfa)
+
+print(prueba_2)
+```
+
+A partir del p-value obtenido, nuevamente, se falla en rechazar la hipótesis
+nula en favor de la hipótesis alternativa, pues es mucho mayor que el nivel de
+significancia escogido. Por lo tanto, no hay suficiente información para
+demostrar que el tiempo de los atletas de raza blanca disminuyó más de 3.4
+segundos entre su medición previa y posterior al entrenamiento. 
+
+
+## Pregunta 3
+
+¿Es posible afirmar que, en promedio, los atletas de raza blanca superan a los de raza oriental por 1 segundo después del entrenamiento?
+
+Debido a que se enfrentan dos muestras no pareadas, pero que mantienen su
+independencia, al provenir de atletas distintos, se utiliza la prueba T
+de Student para muestras independientes con un nivel de significancia de 0.05.
+
+
+En primer lugar, se extraen los datos relevantes para la pregunta.
+
+```{r}
+muestra_Blanca <- datos %>% 
+  filter(Raza == "Blanca") %>%
+  select(-Previo)
+
+print(muestra_Blanca)
+
+muestra_Oriental <- datos %>% 
+  filter(Raza == "Oriental") %>%
+  select(-Previo)
+
+print(muestra_Oriental)
+```
+
+Para este caso, es necesario demostrar que ambas muestras son aplicables para
+realizarles una prueba T de Student común. Su independencia ya fue justificada,
+pues no se trata de solamente de atletas diferentes, sino que también son de
+razas distintas. Además, como los datos son de diferentes atletas, no hay forma
+de justificar que estén pareados.
+
+Entonces, se determina que ambas muestras provienen de distribuciones similares
+a una normal.
+
+```{r}
+normalidad_Blancas_Posterior <- shapiro.test(muestra_Blanca$Posterior)
+
+print(normalidad_Blancas_Posterior)
+
+# Grafico
+datos_grafico <- data.frame(muestra.Blancas = muestra_Blanca$Posterior)
+g <- ggqqplot(datos_grafico, x = "muestra.Blancas", color = "SteelBlue")
+print(g)
+
+normalidad_Oriental_Posterior <- shapiro.test(muestra_Oriental$Posterior)
+
+print(normalidad_Oriental_Posterior)
+
+# Grafico
+datos_grafico <- data.frame(muestra.Oriental = muestra_Oriental$Posterior)
+g <- ggqqplot(datos_grafico, x = "muestra.Oriental", color = "SteelBlue")
+print(g)
+```
+Ambas pruebas entregan un p-value mayor al nivel de significancia, sin embargo,
+la muestra de raza blanca se encuentra peligrosamente cerca del valor, por lo
+que es pertinente tener más cuidado con las conclusiones, esto tambien se puede observar en el primer grafico Q-Q
+presentado el cual tiene algunos datos fuera de la distribucion normal.
+
+Se determinan las hipótesis a probar, con ub = Media del tiempo posterior de los
+atletas blancos y uo = Media del tiempo posterior de los atletas orientales
+
+* H0: ub = uo + 1
+* HA: ub != uo + 1
+
+En otros términos
+
+* H0: ub - uo = 1
+* Ha: ub - uo != 1
+
+
+```{r}
+alfa <- 0.05
+valor_nulo_3 <- 1
+
+prueba_3 <- t.test(x = muestra_Blanca$Posterior,
+                   y = muestra_Oriental$Posterior,
+                   paired = FALSE,
+                   alternative = "two.sided",
+                   mu = valor_nulo_3,
+                   conf.level = 1 - alfa)
+
+print(prueba_3)
+```
+En este caso, el p-value es, en varias magnitudes, menor que el nivel de
+significancia obtenido, por ende, se rechaza la hipótesis nula en favor de la
+hipótesis alternativa, concluyendo que los atletas de raza blanca no superan a
+los de raza oriental por un segundo en su tiempo posterior. Pese a que la prueba 
+fue realizada de forma bilateral, el intervalo de confianza obtenido revela sólo
+valores negativos, por lo que es seguro asumir que, de hecho, los atletas de
+raza blanca no sólo no superan a los de raza oriental, sino que tienen peores 
+tiempos posteriores.
+
+
+## Pregunta 4
+
+¿Será cierto que hay menos atletas de raza oriental que redujeron sus mejores marcas en al menos 5,1 segundos que atletas de raza negra que lo hicieron en al menos 1,3 segundos?
+
+En este caso tenemos que separar a los atletas de respectivas razas y calcular que proporcion de cada uno logran reducir sus marcas el tiempo que se pregunta, posteriormente utilizar el metodo de Wilson
+
+```{r}
+datos <- read.csv2("EP02 Datos.csv")
+
+muestra_Oriental <- datos %>% 
+  filter(Raza == "Oriental") %>%
+  mutate(reduccion = Previo - Posterior)
+
+muestra_Negra <- datos %>%
+  filter(Raza == "Negra") %>%
+  mutate(reduccion = Previo - Posterior)
+  
+
+# Contar cuántos atletas de cada raza cumplen con las condiciones
+cumplen_orientales <- nrow(muestra_Oriental %>% filter(reduccion >= 5.1))
+cumplen_negras <- nrow(muestra_Negra %>% filter(reduccion >= 1.3))
+
+# Total de atletas por raza
+total_orientales <- nrow(muestra_Oriental)
+total_negras <- nrow(muestra_Negra)
+
+# Proporciones
+proporcion_orientales <- cumplen_orientales / total_orientales
+proporcion_negras <- cumplen_negras / total_negras
+
+```
+Ahora que tenemos las probabilidades de éxito (o sea los atletas que efectivamente redujeron su tiempo) podemos hacer un prop.test para ver si hay diferencia significativa en las proporciones, utilizando un nivel de significancia de 0.05.
+
+Definiendo las hipótesis:
+
+* H0: La proporción de atletas de raza oriental que redujeron su marca en al menos 5.1 segundos es igual a la proporción de atletas de raza negra que redujeron su marca en al menos 1.3 segundos.
+ 
+* Ha: La proporción de atletas de raza oriental que redujeron su marca en al menos 5.1 segundos es menor que la proporción de atletas de raza negra que redujeron su marca en al menos 1.3 segundos.
+
+Como buscamos que la proporcion sea menor, en el prop.test se pone el alternative = "less"
+
+
+```{r}
+resultado_prueba <- prop.test(c(cumplen_orientales, cumplen_negras), 
+                              c(total_orientales, total_negras), 
+                              alternative = "less")
+
+print(resultado_prueba)
+
+```
+
+Se puede apreciar que el p-values es aprox. 0.002, lo cual es menor al 0.05 que se estableció, por lo tanto se rechaza la hipótesis nula en favor de la alternativa, y se concluye que con un 95% de confianza que la proporción de atletas de raza oriental que redujeron su marca en al menos 5.1 segundos es menor que la proporción de atletas de raza negra que redujeron su marca en al menos 1.3 segundos.
+

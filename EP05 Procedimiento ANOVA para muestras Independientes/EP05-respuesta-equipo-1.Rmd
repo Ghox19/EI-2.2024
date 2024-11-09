@@ -1,0 +1,226 @@
+---
+title: "EP05"
+author: "Equipo 1"
+date: "2024-10-21"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('ez', quietly = TRUE)){
+  install.packages('ez')
+}
+library(ez)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+```
+
+-----------
+
+## **Enunciado**
+
+En una emocionante competencia de cubos Rubik, participantes de Chile, Argentina, Colombia, Uruguay, Perú y Ecuador demostraron su destreza en resolver tres tipos de cubos: 2x2x2, 3x3x3 y Megaminx.
+
+Después del torneo, un grupo de investigadores de la Asociación Mundial del Cubo, interesado en los tiempos que hicieron las jugadoras y los jugadores en la competencia, decidieron estudiar si el país y el tipo de cubo usado en cada prueba tienen influencia en los segundos que se tardan en resolverlos. Para ello usaron una muestra aleatoria de los datos de la competencia, en la cual participaron más de 2.000 personas, con las siguientes variables:
+
+| Variable | Descripción                                                                 |
+|----------|-----------------------------------------------------------------------------|
+| id       | Identificador único de cada participante.                                   |
+| país     | País que representa cada participante (Argentina, Chile, Colombia, Ecuador, Perú, Uruguay). |
+| tipo     | Tipo de cubo usado en la prueba (2x2x2, 3x3x3, Megaminx).                   |
+| tiempo   | Tiempo, en segundos, que toma al participante en resolver el cubo de la prueba. |
+
+----------
+
+### **¿Existen diferencias en el tiempo de resolución de cubos 2x2x2 entre participantes de Chile, Perú y Argentina?**
+
+----------
+
+#### **Hipótesis**
+
+- \(H_0:\) El tiempo de resolución promedio necesitado para resolver el cubo de tamaño 2x2x2 es igual para los tres países participantes
+
+\[ \mu_{Chile}^{2x2x2} = \mu_{Peru}^{2x2x2} = \mu_{Argentina}^{2x2x2} \]
+
+- \(H_A:\) El tiempo de resolución promedio necesitado para resolver el cubo de 2x2x2 es diferente para al menos uno de los países. Matemáticamente \( \exists i, j \in \{Chile, Perú, Argentina\}, i \neq j \mid \mu_{i}^{2x2x2} \neq \mu_{j}^{2x2x2} \).
+
+-----------
+
+```{r}
+# Lectura del archivo CSV
+datos <- read.csv2("EP05 Datos.csv")
+head(datos)
+```
+
+-------
+
+Para responder esta pregunta requerimos filtrar los datos para participantes de Chile, Perú y Argentina que hayan resuelto el cubo de \( 2x2x2 \)
+
+-------
+
+```{r}
+# Filtrar los datos usando dplyr y el operador pipe (%>%)
+df_filtrado <- datos %>%
+  filter(pais %in% c("Chile", "Perú", "Argentina") & tipo == "2x2x2")
+
+cat("Observaciones:",cantidad_datos <- nrow(df_filtrado),"participantes")
+
+# Mostrar el resultado filtrado
+head(df_filtrado)
+```
+
+----------
+
+#### **Condiciones a verificar**
+
+**El procedimiento ANOVA requiere que se cumplan algunas condiciones:**
+
+1. **La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales.**
+
+
+ - La primera condición se verifica, puesto que si para resolver un cubo de 2x2x2 alguien de un país ya sea Chile, Perú o Argentina este se tarda 20 [seg] mientras que uno de otro país de los mencionados tarda 30 [seg], es la misma diferencia (10 segundos) que se presentaría para otro caso en donde alguien de un cierto país tarda 35 [seg] y otro participante 45 [seg]
+ 
+-------------
+
+2. **Las k muestras son obtenidas de manera aleatoria e independiente desde la(s) población(es) de origen.**
+
+- El enunciado señala que el proceso seguido para obtener los datos garantiza el cumplimiento de la segunda condición 
+
+- *"Para ello usaron una muestra aleatoria de los datos de la competencia, en la cual participaron más de 2.000 personas"*
+
+- Como 120 < 10% de 2000, se puede considerar que las muestras son independientes
+
+-------------
+
+3. **Se puede suponer razonablemente que la(s) población(es) de origen sigue(n) una distribución normal.**
+
+- Notamos que los puntos del gráfico Quantil-Quantil (QQ plot) se ajustan a la recta, lo que sugiere que los datos siguen una distribución normal.
+
+
+```{r}
+
+# Graficar el QQ plot por país y tiempo
+# Comprobación de normalidad con QQ plot
+g <- ggqqplot(df_filtrado,
+              x = "tiempo",
+              color = "pais")  # Usamos 'pais' en lugar de 'algoritmo'
+
+# Facetear por país
+g <- g + facet_wrap(~ pais)
+
+# Personalización del gráfico eliminando ticks y etiquetas
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+-----------
+
+4. **Si las muestras provienen de más de una población, estas tienen la misma varianza.**
+
+- Procederemos a comprobar que la razón entre la máxima y mínima varianza muestral de los grupos no sea superior a 1,5.
+
+
+```{r}
+
+# Calcular la varianza muestral para cada país
+varianza_por_pais <- df_filtrado %>%
+  group_by(pais) %>%
+  summarise(varianza_muestral = var(tiempo, na.rm = TRUE))
+
+# Mostrar el resultado
+print(varianza_por_pais)
+
+# Calcular la razón entre la máxima y mínima varianza muestral
+max_var <- max(varianza_por_pais$varianza_muestral)
+min_var <- min(varianza_por_pais$varianza_muestral)
+razon_varianza <- max_var / min_var
+print(razon_varianza)
+```
+
+Notamos que la razón es \(1.338323 < 1.5\) por lo tanto, se cumple la condición de igualdad de varianzas (homocedasticidad). 
+
+---------   
+
+#### **Análisis de varianza (ANOVA)**
+
+- Procederemos a realizar un análisis de varianza (ANOVA) para determinar si existen diferencias significativas en el tiempo de resolución de cubos 2x2x2 entre participantes de Chile, Perú y Argentina.
+
+```{r}
+# Realizar ANOVA
+modelo_anova <- aov(tiempo ~ pais, data = df_filtrado)
+resumen_anova <- summary(modelo_anova)
+print(resumen_anova)
+
+# Obtener el valor p
+valor_p <- anova(modelo_anova)[["Pr(>F)"]][1]
+print(valor_p)
+
+# Interpretación del valor p
+if (valor_p < 0.05) {
+  cat("El valor p es", valor_p, "< 0.05, por lo que rechazamos la hipótesis nula")
+} else {
+  cat("El valor p es", valor_p, ">= 0.05, por lo que no rechazamos la hipótesis nula")
+}
+```
+
+----------
+
+#### **Conclusión de anova**
+
+- Dado que el valor p = 2.139484e-35 < 0.05 rechazamos la hipótesis nula en favor de la hipótesis alternativa. Por lo tanto, concluimos con 95% de confianza que existen diferencias significativas en el tiempo de resolución de cubos 2x2x2 para al menos uno los países Chile, Perú y Argentina.
+
+- Para determinar cuáles países presentan diferencias significativas en el tiempo de resolución de cubos 2x2x2, realizaremos pruebas post-hoc para este caso: Prueba HSD de Tukey.
+
+----------
+
+#### **Prueba post-hoc: HSD de Tukey**
+
+- Realizaremos la prueba post-hoc de Tukey para determinar cuáles países presentan diferencias significativas en el tiempo de resolución de cubos 2x2x2.
+
+```{r}
+# Realizar prueba post-hoc de Tukey
+prueba_tukey <- TukeyHSD(modelo_anova,
+                         "pais",
+                         ordered = TRUE,
+                         conf.level = 0.95)
+
+# Mostrar el resultado
+print(prueba_tukey$`pais`)
+```
+A partir de las muestras comparadas, podemos ver que todos tienen diferencias significativas entre ellas debido a que el p-value entre la diferencia de paises es menor al nivel de significancia de 0.05, por lo que podemos decir con un 95% de confianza que las medias entre los grupos si son diferentes entre sí. Notando la diferencia mas grande entre Argentina y Perú, lo que indicaría que es la que tienen la variabilidad más significativa.
+

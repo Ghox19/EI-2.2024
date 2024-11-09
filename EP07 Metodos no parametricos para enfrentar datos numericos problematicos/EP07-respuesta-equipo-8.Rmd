@@ -1,0 +1,549 @@
+---
+title: "EP07 - Métodos No Paramétricos"
+author: "Equipo 8"
+date: "2024-10-29"
+output: pdf_document
+---
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+```
+
+# Introducción
+
+Como equipo número 8, se nos pidió realizar un ejercicio sobre métodos no paramétricos para enfrentar datos numéricos problemáticos.
+
+# Enunciado
+
+En el trabajo de título de una estudiante del DIINF se reportan tiempos de ejecución (en milisegundos) y la cercanía con la solución óptima (en porcentaje) de la mejor solución encontrada con tres versiones de un algoritmo genético para resolver instancias del problema del vendedor viajero disponibles en repositorios públicos. Ahora debe enfrentar el análisis de estos datos, por lo que está solicitando ayuda de las y los estudiantes de Estadística Inferencial.
+
+Obtenemos los datos proporcionados mediante el archivo CSV.
+
+```{r}
+# Leemos los datos del CSV
+
+datos <- read.csv("EP07 Datos.csv")
+
+# Mostramos los datos iniciales
+head(datos)
+```
+
+Para este enunciado, junto con los datos entregados, se nos entregaron las siguientes preguntas a responder:
+
+## Pregunta 1
+
+Observando los datos, la memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas de los tiempos de ejecución de las versiones A y B (en formato ancho). Usando como semilla el valor 73, obtengan muestras aleatorias independientes de 24 tiempos registrados por la versión A y 20 tiempos registrados por la versión B del algoritmo. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Filtramos los datos para tener las instancias con 70 o más nodos
+
+datos_filtradosEJ1 <- datos %>% filter(n.nodos >= 70)
+
+# Mostramos los primeros datos
+head(datos_filtradosEJ1)
+```
+
+Ahora debemos obtener solamente los datos de tiempo de ejecución de las versiones A y B, para luego realizar el análisis estadístico pertinente.
+
+```{r}
+# Seleccionamos los tiempos de ejecución A y B de las instancias que tienen 70 o más nodos
+
+TiempoA <- datos_filtradosEJ1$tiempo.A
+TiempoB <- datos_filtradosEJ1$tiempo.B
+
+# Mostramos los datos filtrados
+Tiempos_1 <- data.frame(TiempoA, TiempoB)
+head(Tiempos_1)
+```
+
+### Formulación de Hipótesis
+
+*H0: No existe una diferencia significativa en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.*
+
+*Ha: Existe una diferencia significativa en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.*
+
+### Revisión de Condiciones
+
+Como queremos comparar dos muestras independientes, debemos verificar que las muestras provengan de una población con distribución normal. Para esto, utilizaremos el test de Shapiro-Wilk junto a un gráfico Q-Q para verificar la normalidad de los datos.
+
+```{r}
+# Test de Shapiro-Wilk para TiempoA
+
+shapiro.test(TiempoA)
+
+# Realizamos un gráfico Q-Q para TiempoA
+
+g1 <- ggqqplot(TiempoA, ylab = "TiempoA")
+print(g1)
+```
+
+```{r}
+# Test de Shapiro-Wilk para TiempoB
+
+shapiro.test(TiempoB)
+
+# Realizamos un gráfico Q-Q para TiempoB
+
+g2 <- ggqqplot(TiempoB, ylab = "TiempoB")
+print(g2)
+```
+
+Debido a que los valores obtenidos en las pruebas de Shapiro-Wilk son menores que un **nivel de significancia** de 0.05, y al visualizar el gráfico podemos ver una anormalidad en los datos, rechazamos la hipótesis nula de que los datos provienen de una distribución normal. Por lo tanto, no podemos realizar una prueba t de Student, y procederemos a realizar una prueba no paramétrica suma de rangos de Wilcoxon.
+
+### Condiciones para realizar la prueba de Wilcoxon
+
+1. Las observaciones de ambas muestras son independientes: debido al enunciado del problema y los datos entregados, podemos asumir que las observaciones son independientes.
+
+2. La escala de medición empleada debe ser a lo menos ordinal: los datos entregados son de tipo numérico, por lo que cumplen con esta condición.
+
+Como se cumplen las condiciones para realizar la prueba de Wilcoxon, procedemos a realizarla.
+
+```{r}
+# Prueba de Wilcoxon
+
+# Por enunciado de la pregunta, establecemos la semilla en 73
+set.seed(73)
+
+#Filtramos las columnas que necesitamos
+
+datos_filtradosEJ1 <- datos_filtradosEJ1 %>% select(instancia, tiempo.A, tiempo.B)
+
+# Obtenemos muestras aleatorias independientes de 24 tiempos registrados por la versión A y 20 tiempos registrados por la versión B del algoritmo
+
+n_A <- 24
+n_B <- 20
+
+#Como las muestras deben ser independientes, obtenemos la totalidad de las muestras aleatorias de las instancias y luego seleccionamos las primeras 24 y 20 instancias para A y B respectivamente, así garantizamos la independencia de las muestras.
+
+Muestras1 <- sample_n(datos_filtradosEJ1, n_A + n_B)
+
+# Obtenemos las muestras de los tiempos de ejecución de las versiones A y B
+
+muestraA <- Muestras1[1:n_A, "tiempo.A"]
+
+muestraB <- Muestras1[(n_A + 1):(n_A + n_B), "tiempo.B"]
+
+# Realizamos la prueba de Wilcoxon
+
+alpha <- 0.05
+
+# Realizamos la prueba de Wilcoxon
+Prueba_Wilcoxon <- wilcox.test(muestraA, muestraB, alternative = "two.sided", paired = FALSE, conf.level = 1 - alpha)
+
+print(Prueba_Wilcoxon)
+```
+
+Con los resultados obtenidos, siendo un valor de P de 0.03605, con un 95% de confianza podemos rechazar la hipótesis nula, por lo que existen diferencias significativas en el tiempo de ejecución entre las versiones A y B del algoritmo cuando las instancias tienen 70 o más nodos.
+
+## Pregunta 2
+
+La memorista también sospecha que, al comparar las mismas instancias de prueba con iguales características, las mejores soluciones encontradas por las versiones B y C tienen rendimientos distintos. ¿Estará en lo cierto?
+Para responder, filtren los datos para tener las instancias con 70 o más nodos y seleccionen las columnas con el mejor rendimiento de las versiones B y C en formato ancho. Usando como semilla el valor 71, obtengan una muestra aleatoria de 24 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Filtramos los datos para tener las instancias con 70 o más nodos
+
+datos_filtradosEJ2 <- datos %>% filter(n.nodos >= 70)
+
+# Mostramos los primeros datos
+head(datos_filtradosEJ2)
+```
+
+Ahora debemos obtener solamente los datos de mejor rendimiento de las versiones B y C, para luego realizar el análisis estadístico pertinente.
+
+```{r}
+# Seleccionamos los mejores rendimientos de las versiones B y C de las instancias que tienen 70 o más nodos
+
+datos_filtradosEJ2 <- datos_filtradosEJ2 %>% select(instancia, mejor.B, mejor.C)
+
+head(datos_filtradosEJ2)
+```
+
+### Formulación de Hipótesis
+
+*H0: No existe una diferencia significativa en el mejor rendimiento entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos.*
+
+*Ha: Existe una diferencia significativa en el mejor rendimiento entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos.*
+
+### Revisión de Condiciones
+
+Como queremos comparar dos muestras independientes, debemos verificar que las muestras provengan de una población con distribución normal. Para esto, utilizaremos el test de Shapiro-Wilk junto a un gráfico Q-Q para verificar la normalidad de los datos, además de calcular la diferencia entre los mejores rendimientos de las versiones B y C para la condición de la prueba t.
+
+```{r}
+#Restamos los vectores de mejor rendimiento de las versiones B y C
+
+Resta_muestras <- datos_filtradosEJ2$mejor.B - datos_filtradosEJ2$mejor.C
+
+shapiro.test(Resta_muestras)
+```
+*Gráficos de Q-Q para verificar la normalidad de los datos*
+```{r}
+# Test de Shapiro-Wilk para RendimientoB
+
+shapiro.test(datos_filtradosEJ2$mejor.B)
+
+# Gráfico Q-Q para RendimientoB
+
+g1 <- ggqqplot(datos_filtradosEJ2$mejor.B, ylab = "RendimientoB")
+print(g1)
+```
+
+Ahora realizamos el mismo procedimiento para los datos de mejor rendimiento de la versión C.
+
+```{r}
+# Test de Shapiro-Wilk para RendimientoC
+
+shapiro.test(datos_filtradosEJ2$mejor.C)
+
+# Gráfico Q-Q para RendimientoC
+
+g2 <- ggqqplot(datos_filtradosEJ2$mejor.C, ylab = "RendimientoC")
+
+print(g2)
+```
+
+Dado el valor obtenido en la prueba de Shapiro-Wilk de las diferencias de las muestras, siendo este mayor el nivel de significancia del 0.05, podemos asumir que los datos provienen de una distribución normal, por lo que podemos realizar una prueba t de student, pero en este caso, para fines académicos, realizaremos una prueba no paramétrica de Wilcoxon.
+
+Por otro lado, como la memorista realiza la pregunta para comparar las mismas instancias, podemos concluir que para esta prueba son datos pareados, por lo que realizaremos una prueba de rangos con signo de Wilcoxon.
+
+### Condiciones para realizar la prueba de Wilcoxon
+
+1. Las observaciones de ambas muestras son independientes: debido al enunciado del problema y los datos entregados, podemos asumir que las observaciones son independientes.
+
+2. La escala de medición empleada debe ser a lo menos ordinal: los datos entregados son de tipo numérico, por lo que cumplen con esta condición.
+
+Como se cumplen las condiciones para realizar la prueba de Wilcoxon, procedemos a realizarla.
+
+```{r}
+# Realizamos la prueba de Wilcoxon
+
+# Por enunciado de la pregunta, establecemos la semilla en 71
+
+set.seed(71)
+
+# Obtenemos una muestra aleatoria de 24 instancias
+
+muestra <- sample_n(datos_filtradosEJ2, 24)
+
+# Mostramos la muestra
+
+print(muestra)
+
+# Realizamos la prueba de Wilcoxon
+
+alpha <- 0.05 # Nivel de significancia
+
+Prueba_Wilcoxon_EJ2 <- wilcox.test(muestra$mejor.B, muestra$mejor.C, alternative = "two.sided", paired = TRUE, conf.level = 1 - alpha)
+
+print(Prueba_Wilcoxon_EJ2)
+```
+
+Con los resultados obtenidos, siendo un valor de p de 0.002575, con un 95% de confianza podemos rechazar la hipótesis nula, por lo que existen diferencias significativas en el mejor rendimiento entre las versiones B y C del algoritmo cuando las instancias tienen 70 o más nodos.
+
+## Pregunta 3
+
+La memorista sospecha que hay diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias de prueba tienen 50 o más nodos. ¿Los datos respaldan la intuición de la memorista?
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los tiempos de ejecución registrados (en formato ancho). Usando como semilla el valor 43, obtengan muestras aleatorias independientes de 13, 14 y 13 tiempos registrados por las versiones A, B y C, respectivamente. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Filtramos los datos para tener las instancias con 50 o más nodos
+
+datos_filtradosEJ3 <- datos %>% filter(n.nodos >= 50)
+
+# Mostramos los primeros datos
+
+head(datos_filtradosEJ3)
+```
+
+Ahora debemos obtener solamente los datos de tiempo de ejecución de las versiones A, B y C, para luego realizar el análisis estadístico pertinente.
+
+```{r}
+# Seleccionamos los tiempos de ejecución de las versiones A, B y C de las instancias que tienen 50 o más nodos
+
+datos_filtradosEJ3 <- datos_filtradosEJ3 %>% select(instancia, tiempo.A, tiempo.B, tiempo.C)
+
+# Obtenemos muestras aleatorias independientes de 13, 14 y 13 tiempos registrados por las versiones A, B y C, respectivamente
+
+set.seed(43)
+
+nA <- 13; nB <- 14; nC <- 13
+
+nT <- nA + nB + nC
+
+Datos_Muestra3 <- datos_filtradosEJ3[sample(1:nrow(datos_filtradosEJ3), nT),]
+
+head(Datos_Muestra3)
+```
+
+Ahora, como nos piden que las muestras deben ser independientes, obtenemos las muestras de 13, 14 y 13 tiempos registrados por las versiones A, B y C, respectivamente de distintas instancias.
+
+```{r}
+# Obtenemos las muestras de distintas instancias.
+
+Muestra_A <- Datos_Muestra3[["tiempo.A"]][1:nA] # 13 tiempos registrados por la versión A
+Muestra_B <- Datos_Muestra3[["tiempo.B"]][(nA + 1):(nA + nB)] # 14 tiempos registrados por la versión B
+Muestra_C <- Datos_Muestra3[["tiempo.C"]][(nA + nB + 1):(nA + nB + nC)] # 13 tiempos registrados por la versión C
+```
+
+### Formulación de Hipótesis
+
+H0: No existe una diferencia significativa en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos. (muA = muB = muC)
+
+Ha: Existe una diferencia significativa en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos. (muA != muB != muC)
+
+Como la memorista realiza la pregunta para comparar las versiones del algoritmo A, B y C. Podemos inferir que debemos realizar una prueba ANOVA, debido a comparar más de dos grupos, es por eso que realizaremos las verificaciones de condiciones para realizar esta prueba.
+
+### Condiciones
+
+1. La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales: los datos entregados son de tipo numérico, por lo que cumplen con esta condición.
+
+2. Las k muestras son obtenidas de manera aleatoria e independiente desde la(s) población(es) de origen: debido al enunciado del problema y los datos entregados, podemos asumir que las observaciones son independientes, además de que se obtienen de manera aleatoria.
+
+3. Se puede suponer razonablemente que la(s) población(es) de origen sigue(n) una distribución normal: Para verificar esta condición, utilizaremos el test de Shapiro-Wilk junto a un gráfico Q-Q para verificar la normalidad de los datos.
+
+```{r}
+# Test de Shapiro-Wilk para TiempoA
+
+shapiro.test(Datos_Muestra3$tiempo.A)
+
+# Realizamos un gráfico Q-Q para TiempoA
+
+g1 <- ggqqplot(Datos_Muestra3$tiempo.A, ylab = "TiempoA")
+
+print(g1)
+```
+
+```{r}
+# Test de Shapiro-Wilk para TiempoB
+
+shapiro.test(Datos_Muestra3$tiempo.B)
+
+# Realizamos un gráfico Q-Q para TiempoB
+
+g2 <- ggqqplot(Datos_Muestra3$tiempo.B, ylab = "TiempoB")
+
+print(g2)
+```
+
+```{r}
+# Test de Shapiro-Wilk para TiempoC
+
+shapiro.test(Datos_Muestra3$tiempo.C)
+
+# Realizamos un gráfico Q-Q para TiempoC
+
+g3 <- ggqqplot(Datos_Muestra3$tiempo.C, ylab = "TiempoC")
+
+print(g3)
+```
+
+Debido a los valores P obtenidos, siendo estos menores al nivel de significancia del 0.05, y al visualizar los gráficos Q-Q, podemos apreciar que los datos no provienen de una distribución normal, por lo que no podemos realizar una prueba ANOVA directamente, es por eso que procederemos a realizar una prueba no paramétrica de Kruskal-Wallis.
+
+### Condiciones para realizar la prueba de Kruskal-Wallis
+
+1. La variable independiente debe tener al menos dos niveles: en este caso, la variable independiente es el tiempo de ejecución de las versiones A, B y C del algoritmo.
+
+2. La escala de la variable dependiente debe ser, al menos, ordinal: los datos entregados son de tipo numérico, por lo que cumplen con esta condición.
+
+3. Las observaciones de cada grupo deben ser independientes: debido al enunciado del problema y los datos entregados, podemos asumir que las observaciones son independientes.
+
+Como se cumplen las condiciones para realizar la prueba de Kruskal-Wallis, procedemos a realizarla.
+
+```{r}
+# Realizamos la prueba de Kruskal-Wallis
+
+# Definimos el vector de tiempos
+
+Tiempo <- c(Muestra_A, Muestra_B, Muestra_C)
+
+# Definimos el vector de grupos
+
+Grupo <- c(rep("A", nA), rep("B", nB), rep("C", nC))
+Grupo <- factor(Grupo)
+
+datos_kruskal <- data.frame(Tiempo, Grupo)
+
+print(datos_kruskal)
+
+# Nivel de significancia
+
+alpha <- 0.05
+
+# Realizamos la prueba de Kruskal-Wallis
+
+prueba_kruskal <- kruskal.test(Tiempo ~ Grupo, data = datos_kruskal)
+
+# Mostramos el resultado obtenido
+
+print(prueba_kruskal)
+```
+
+Luego de realizar la prueba de Kruskal-Wallis, y obteniendo un valor de P de 0.02102, con un 95% de confianza podemos rechazar la hipótesis nula, por lo que existen diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos.
+
+Debido a esto, procederemos a realizar una prueba post-hoc de Benjamini-Hochberg para determinar entre cuáles versiones existen diferencias significativas.
+
+```{r}
+# Realizamos la prueba post-hoc de Benjamini-Hochberg
+
+post_hoc_kruskal <- pairwise.wilcox.test(datos_kruskal[["Tiempo"]], datos_kruskal[["Grupo"]], p.adjust.method = "BH", paired = FALSE, exact = FALSE)
+
+print(post_hoc_kruskal)
+```
+
+### Conclusión
+
+Finalmente, luego de seleccionar la prueba de ANOVA como prueba ómnibus inicial, y corroborar que no se cumple la prueba de normalidad de los datos para realizar esta prueba, procedimos a realizar una prueba no paramétrica de Kruskal-Wallis, concluyendo para esta prueba el rechazar la hipótesis nula, en favor de la alternativa, por lo que existen diferencias significativas en el tiempo de ejecución entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos. Es por eso que procedimos a realizar una prueba post-hoc de Benjamini-Hochberg, concluyendo que existen diferencias significativas entre las versiones A y B, y entre las versiones A y C, pero no entre las versiones B y C.
+
+## Pregunta 4
+
+La memorista también sospecha que, al comparar las mismas instancias con iguales características, las mejores soluciones encontradas por las diferentes versiones del algoritmo tienen rendimientos distintos. ¿Estará en lo cierto?
+
+Para responder, filtren los datos para tener las instancias con 50 o más nodos y seleccionen las columnas con los mejores rendimientos registrados. Usando como semilla el valor 16, obtengan una muestra aleatoria de 21 instancias. Realicen un análisis estadístico pertinente (enunciar hipótesis, revisar condiciones, seleccionar pruebas ómnibus y post-hoc según corresponda) para responder la pregunta planteada, utilizando pruebas no paramétricas de ser necesario.
+
+```{r}
+# Filtramos los datos para tener las instancias con 50 o más nodos
+datos_filtradosEJ4 <- datos %>% filter(n.nodos >= 50)
+
+# Mostramos los primeros datos
+
+head(datos_filtradosEJ4)
+```
+
+Ahora debemos obtener solamente los datos de mejor rendimiento de las versiones A, B y C, para luego realizar el análisis estadístico pertinente.
+
+```{r}
+# Seleccionamos los mejores rendimientos de las versiones A, B y C de las instancias que tienen 50 o más nodos
+
+datos_filtradosEJ4 <- datos_filtradosEJ4 %>% select(instancia, mejor.A, mejor.B, mejor.C)
+
+# Obtenemos una muestra aleatoria de 21 instancias
+
+set.seed(16)
+
+muestra4 <- sample_n(datos_filtradosEJ4, 21)
+
+# Mostramos la muestra
+
+print(muestra4)
+```
+
+### Formulación de Hipótesis
+
+H0: No existe una diferencia significativa en el mejor rendimiento entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos. (muA = muB = muC)
+
+Ha: Existe una diferencia significativa en el mejor rendimiento de al menos una de las versiones del algoritmo cuando las instancias tienen 50 o más nodos.
+
+Como la memorista realiza la pregunta para comparar las versiones del algoritmo A, B y C. Podemos inferir que debemos realizar una prueba ANOVA, debido a comparar más de dos grupos, por otro lado, como nos indican comparar una misma instancia en diferentes versiones, podemos inferir que los datos son pareados, por lo que se debería de realizar una prueba de ANOVA para muestras correlacionadas.
+
+### Condiciones para realizar la prueba de ANOVA
+
+1. La escala con que se mide la variable dependiente tiene las propiedades de una escala de intervalos iguales: los datos entregados son de tipo numérico, por lo que cumplen con esta condición.
+
+2. Las mediciones son independientes al interior de cada grupo: debido al enunciado del problema y los datos entregados, podemos asumir que las observaciones son independientes.
+
+3. Se puede suponer razonablemente que la(s) población(es) de origen sigue(n) una distribución normal: Para verificar esta condición, utilizaremos el test de Shapiro-Wilk junto a un gráfico Q-Q para verificar la normalidad de los datos.
+
+```{r}
+# Test de Shapiro-Wilk para muestra A
+
+shapiro.test(datos_filtradosEJ4$mejor.A)
+
+# Gráfico Q-Q para muestra A
+
+g1 <- ggqqplot(datos_filtradosEJ4$mejor.A, ylab = "Mejor A")
+
+print(g1)
+```
+
+```{r}
+# Test de Shapiro-Wilk para muestra B
+
+shapiro.test(datos_filtradosEJ4$mejor.B)
+
+# Gráfico Q-Q para muestra B
+
+g2 <- ggqqplot(datos_filtradosEJ4$mejor.B, ylab = "Mejor B")
+
+print(g2)
+```
+
+```{r}
+# Test de Shapiro-Wilk para muestra C
+
+shapiro.test(datos_filtradosEJ4$mejor.C)
+
+# Gráfico Q-Q para muestra C
+
+g3 <- ggqqplot(datos_filtradosEJ4$mejor.C, ylab = "Mejor C")
+
+print(g3)
+```
+
+Debido a que los valores P obtenidos, siendo estos menores al nivel de significancia del 0.05, y al visualizar los gráficos Q-Q, podemos apreciar que los datos no provienen de una distribución normal, por lo que no podemos realizar una prueba ANOVA directamente, es por eso que realizaremos una prueba de Friedman, la cual es una alternativa a la prueba de ANOVA para cuando los datos no provienen de una distribución normal.
+
+### Condiciones para realizar la prueba de Friedman
+
+1. La variable dependiente debe ser categórica y tener al menos tres niveles: en este caso, la variable dependiente es el mejor rendimiento de las versiones A, B y C del algoritmo, por lo tanto cumple con esta condición.
+
+2. La escala de la variable dependiente debe ser, al menos, ordinal: los datos entregados son de tipo numérico, por lo que cumplen con esta condición.
+
+3. Las observaciones son una muestra aleatoria e independiente de la población: debido al enunciado del problema y los datos entregados, podemos asumir que las observaciones son independientes.
+
+### Realizamos la prueba de Friedman
+
+```{r}
+# Realizamos la prueba de Friedman
+
+# Definimos el vector de mejores rendimientos
+
+Mejor_Rendimiento <- c(muestra4$mejor.A, muestra4$mejor.B, muestra4$mejor.C)
+
+# Definimos el vector de grupos
+
+Grupo <- c(rep("A", 21), rep("B", 21), rep("C", 21))
+Grupo <- factor(Grupo)
+
+# Definimos el vector de casos
+Caso <- rep(1:21, 3)
+
+datos_friedman <- data.frame(Caso, Mejor_Rendimiento, Grupo)
+
+# Mostramos el dataframe
+head(datos_friedman)
+
+# Establecemos el nivel de significancia
+
+alpha <- 0.05
+
+# Realizamos la prueba de Friedman
+
+prueba_friedman <- friedman.test(Mejor_Rendimiento ~ Grupo | Caso, data = datos_friedman)
+
+print(prueba_friedman)
+```
+
+Luego de realizar la prueba de Friedman, y obteniendo un valor de P de 0.004926, con un 95% de confianza podemos rechazar la hipótesis nula, por lo que existen diferencias significativas en el mejor rendimiento entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos.
+Debido a esto, procederemos a realizar una prueba post-hoc de Holm o Benjamini-Hochberg para determinar entre cuáles versiones existen diferencias significativas.
+
+```{r}
+# Realizamos la prueba post-hoc de Holm
+
+post_hoc_friedman <- pairwise.wilcox.test(datos_friedman[["Mejor_Rendimiento"]], datos_friedman[["Grupo"]], p.adjust.method = "holm", paired = TRUE, exact = FALSE)
+
+# Mostramos el resultado obtenido
+
+print(post_hoc_friedman)
+```
+
+### Conclusión
+
+Luego de realizar la prueba de Friedman, y obtener un valor de P de 0.004926, con un 95% de confianza podemos rechazar la hipótesis nula, por lo que existen diferencias significativas en el mejor rendimiento entre las versiones del algoritmo cuando las instancias tienen 50 o más nodos. Por otro lado, al realizar la prueba post-hoc de Holm, podemos concluir que existen diferencias significativas entre el mejor rendimiento de las versiones A y B.
+

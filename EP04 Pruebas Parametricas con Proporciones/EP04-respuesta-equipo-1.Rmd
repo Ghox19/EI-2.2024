@@ -1,0 +1,282 @@
+---
+title: "EP04"
+author: "Equipo 1"
+date: "2024-10-14"
+output:
+    html_document:
+    highlight: tango
+    word_document: default
+    pdf_document: default
+---
+
+<style>
+body {
+  font-family: 'Calibri', sans-serif;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('tidyverse', quietly = TRUE)){
+  install.packages('tidyverse')
+}
+library(tidyverse)
+if (!requireNamespace('RVAideMemoire', quietly = TRUE)){
+  install.packages('RVAideMemoire')
+}
+library(RVAideMemoire)
+if (!requireNamespace('rcompanion', quietly = TRUE)){
+  install.packages('rcompanion')
+}
+library(rcompanion)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+```
+
+## Pregunta 1
+
+#### Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas. **¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?**
+
+Indicación: obtenga la muestra de 50 personas a partir del archivo “EP04 Datos.csv” que se encuentra en el directorio compartido, usando la semilla 102. Considere un nivel de significación α = 0,05.
+
+Para esta pregunta es necesario leer los datos entregados, por lo cual se realiza esto de la manera:
+
+```{r}
+datosCSV <- read.csv2("EP04 Datos.csv")
+```
+
+Luego de esto para generar la muestra se realiza tanto la función sample como el establecimiento de la semilla a utilizar, la cual es 102:
+
+```{r}
+set.seed(102)
+muestra <- datosCSV[sample(nrow(datosCSV), 50), ]
+```
+
+Ahora, en términos del problema propuesto, se realizará el enfoque dado a que se tienen 3 estrategias distintas de verificar si existe alguna diferencia en la efectividad de alguna de las estrategias sobre otras, dejándonos con las hipótesis:
+
+- \(H_0\):  La efectividad que presentan las diferentes estrategias es la misma entre sí
+
+- \(H_A\): La efectividad que presentan las diferentes estrategias es diferente entre sí
+
+Debido a que se busca si existe una diferencia significativa entre las distintas estrategias y además de tener mas de dos observaciones apareadas (estrategia 1, 2 y 3), se elige la prueba Cochran. Para esto se deben cumplir ciertas condiciones, la primera es que si las variables de respuestas son dicotómicas, o sea que tienen dos resultados, en este caso se tiene que puede estar tanto aprobado como rechazado, por lo que se cumple este aspecto, además de esto se tiene que las variables independientes son categóricas, ya que separan las muestras base a la estrategia aplicada, además de esto se tiene que las observaciones son independientes entre sí, ya que ninguna persona es igual a otra, ni está relacionada su experiencia con otra, por último se tiene que el tamaño de la muestra cumpla con la fórmula:
+
+\[b * k >= 24\]
+
+En este caso se tiene b como el numero de bloques (en este caso 50), y k como la cantidad de tratamientos (en este caso 3), por lo cual tenemos como resultado 1500, de lo cual cumple con lo necesitado para la prueba, por último se aclara que la población de muestra no cumple con el 10% de la población. En este caso 50 de 1500 observaciones, siendo esto un 3,333%.
+
+Aplicando el test con un nivel de significancia de 0.05, nos da como resultado:
+
+```{r}
+alfa <- 0.05
+
+personas <- 1:50
+estrategia1 <- muestra$estrategia_1
+estrategia2 <- muestra$estrategia_2
+estrategia3 <- muestra$estrategia_3
+
+datos <- data.frame(personas, estrategia1, estrategia2, estrategia3)
+
+datos <- datos %>% pivot_longer(c("estrategia1", "estrategia2", "estrategia3"),
+                                names_to = "estrategias",
+                                values_to = "resultado")
+
+datos[["personas"]] <- factor(datos[["personas"]])
+datos[["estrategias"]] <- factor(datos[["estrategias"]])
+
+prueba <- cochran.qtest(resultado ~ estrategias | personas,
+                        data = datos, alpha = alfa)
+
+print(prueba)
+```
+
+Con el resultado obtenido podemos verificar que el p-value es mayor que el nivel de significancia dado por alfa, tal que se tiene que 0.4281 > 0.05, por lo cual no existe evidencia suficiente como para rechazar la hipótesis nula en favor de la alternativa, que en este caso es que existe alguna diferencia en eficacia entre alguna estrategia presentada.
+
+--------
+
+--------
+
+## Pregunta 2
+#### Una organización de conservación de la fauna silvestre estudia manadas de tres tipos de animales herbívoros en reservas naturales africanas. Se seleccionó aleatoriamente una muestra de 30 observaciones de los animales que se acercaron a beber agua en el principal afluente de las reservas Etosha y Mahago durante tres días consecutivos del mes de febrero. Se registraron 5 elefantes, 10 antílopes y 15 cebras en la primera, y 6 elefantes, 14 antílopes y 10 cebras en la segunda. **¿Existe evidencia de que la proporción de especies es la misma en ambas reservas?**
+
+**Etosha**
+
+- Elefantes: 5
+- Antílopes: 10
+- Cebras: 15
+
+**Mahago**
+
+- Elefantes: 6
+- Antílopes: 14
+- Cebras: 10
+
+Como en esta pregunta nos solicitan comparar dos poblaciones (variable dicotómica: Etosha - Mahago) y verificar si presentan la misma proporción de especies entre ambas reservas, corresponde utilizar una prueba chi-cuadrado de homogeneidad. Ante esto se plantean las siguientes hipótesis:
+
+
+- \(H_0\): Existe la misma proporción de especies en ambas reservas.
+
+- \(H_A\): Las proporciones de especies son distintas entre las reservas.
+
+Revisamos si podemos hacer chi-cuadrado de homogeneidad verificando las observaciones esperadas
+```{r}
+primera = c(((30*11)/60), ((30*24)/60), ((30*25)/60))
+segunda = c(((30*11)/60), ((30*24)/60), ((30*25)/60))
+
+tabla <- as.table(rbind(primera, segunda))
+
+dimnames(tabla) <- list(grupo = c("primera", "segunda"), animales = c("Elefantes", "Antílopes", "Cebras"))
+
+print(tabla)
+
+```
+Con esta tabla se ha comprobado que hay más de 5 observaciones por lo que se puede proceder con chi-cuadrado de homogeneidad.
+```{r}
+# Creamos tabla de contingencia
+etosha <- c(5,10,15)
+mahago <- c(6,14,10)
+
+
+tabla<- as.table(rbind(etosha, mahago))
+dimnames(tabla) <- list(lugar = c("Etosha", "Mahago"),
+                        especies = c("Elefante", "Antílopes", "Cebras"))
+print(tabla)
+
+#Hacemos la prueba de chi-cuadrado de homogeneidad
+prueba <- chisq.test(tabla)
+print(prueba)
+
+```
+
+Dado que `p = 0.4153` y suponiendo un nivel de significación $\alpha$ = 0.05 $\rightarrow$ Como 0.4153 > 0.05 entonces se falla al rechazar la hipótesis nula. Es decir, no hay evidencia suficientemente fuerte que sugiera, con 95% de confianza que en Etosha y Mahago tienen proporciones distintas entre las especies.
+
+
+-----------
+
+-----------
+
+## Pregunta 3
+
+#### Una organización dedicada a la rehabilitación de villanos ha observado que muchos de ellos ingresan al programa con niveles elevados de hostilidad. Para abordar este problema, decidieron implementar un nuevo programa de bienvenida diseñado para reducir la hostilidad y facilitar la reintegración a la sociedad. Para evaluar la efectividad de este programa, se reclutó a un grupo de 20 villanos a quienes se les midió el nivel de hostilidad (alto o bajo) antes y después de participar en el programa de bienvenida. Los resultados se presentan a continuación:
+
+- 2 villanos no mostraron hostilidad ni antes ni después.
+- 15 villanos que inicialmente mostraban hostilidad dejaron de hacerlo.
+- 2 villanos mantuvieron un elevado nivel de hostilidad.
+- el otro villano desarrolló síntomas de hostilidad tras participar en el programa cuando antes no era hostil.
+
+#### **¿Qué se puede concluir acerca de la efectividad del nuevo programa de bienvenida para reducir la hostilidad en los villanos?**
+
+En esta pregunta nos solicitan de concluir acerca de la efectividad de un programa aplicado sobre un grupo de villanos. Como nos entregan los datos pre y post programa se crea una muestra emparejada sobre los 20 mismos villanos. Además nos entregan los dos condiciones diferentes (hostil y no hostil) para el mismo grupo. Por lo que podemos concluir que se utiliza la prueba de McNemar.
+
+Planteamos las hipótesis de McNemar:
+
+- \(H_0\): No hay cambios significativos en los villanos.
+
+- \(H_A\): hay cambios significativos en los villanos.
+
+Resultado final de cada villano:
+
+| Villano | Pre Programa | Post Programa |
+|---------|--------------|---------------|
+| 1       | no hostil    | no hostil     |
+| 2       | no hostil    | no hostil     |
+| 3       | hostil       | no hostil     |
+| 4       | hostil       | no hostil     |
+| 5       | hostil       | no hostil     |
+| 6       | hostil       | no hostil     |
+| 7       | hostil       | no hostil     |
+| 8       | hostil       | no hostil     |
+| 9       | hostil       | no hostil     |
+| 10      | hostil       | no hostil     |
+| 11      | hostil       | no hostil     |
+| 12      | hostil       | no hostil     |
+| 13      | hostil       | no hostil     |
+| 14      | hostil       | no hostil     |
+| 15      | hostil       | no hostil     |
+| 16      | hostil       | no hostil     |
+| 17      | hostil       | no hostil     |
+| 18      | hostil       | hostil        |
+| 19      | hostil       | hostil        |
+| 20      | no hostil    | hostil        |
+
+
+
+```{r}
+# Construir la tabla de contingencia.
+villano <- seq(1:20)
+
+# Datos pre-programa: 17 hostiles y 3 no hostiles
+pre_programa <- c(rep("No hostil", 2),rep("Hostil", 17), rep("No hostil", 1))
+
+# Datos post-programa: 3 hostiles y 17 no hostiles 
+post_programa <- c(rep("No hostil", 17),rep("Hostil", 3))
+
+# Crear el data frame
+datos <- data.frame(villano, pre_programa, post_programa)
+
+# Construir la tabla de contingencia
+tabla <- table(pre_programa, post_programa)
+print(tabla)
+
+# Aplicar la prueba de McNemar a la tabla de contingencia.
+prueba_1 <- mcnemar.test(tabla)
+cat("\n")
+cat("Prueba de McNemar usando la tabla de contingencia: \n") 
+print(prueba_1)
+
+# Aplicar la prueba de McNemar directamente a las muestras.
+prueba_2 <- mcnemar.test(pre_programa, post_programa)
+cat("\n")
+cat("Prueba de McNemar usando las muestras:\n")
+print(prueba_2)
+```
+
+Al considerar un nivel de significancia α = 0.05 y un p-value = 0.001154, donde p < α. Se rechaza la hipótesis nula. Esto indica que si hay evidencia suficiente para aceptar la hipótesis alternativa indicando que el programa ha sido efectivo para reducir la hostilidad de los villanos.
+
+--------
+
+--------
+
+## Pregunta 4
+
+#### Durante un apocalipsis zombie, un grupo de 10 mujeres y 14 hombres sobrevivientes se encuentra buscando desesperadamente refugio y encuentran dos edificios abandonados que podrían servir: una escuela y un centro comercial. Algunas personas piensan que la escuela es más segura, mientras que otras consideran que el centro comercial es más seguro. Después de elegir sus opciones, se observa que 6 mujeres y 10 hombres eligen refugiarse en la escuela abandonada mientras que los otros optan por el centro comercial. **¿Hay relación entre el sexo de la persona y el edificio abandonado que encuentra más seguro?**
+
+Para este problema se presenta una búsqueda de existencia de relacion entre dos variables categóricas, por lo cual se optó, debido a que las dos son variables dicotómicas, por la prueba Fisher, la cual se veria con la prueba de independencia de los datos, buscando que nos de que exista alguna relacion entre el sexo y el lugar donde se refugiaron, nos deja como hipótesis:
+
+- \(H_0\): Las variables sexo de la persona y edificio abandonado son independendientes.
+
+- \(H_A\): Las variables sexo de la persona y edificio abandonado están relacionadas.
+
+Para comprobar si es válido el uso de esta prueba se hace la verificacion de sus condiciones, de lo cual se presenta que la muestra fue obtenida de manera aleatoria entre los supervivientes, además esto representa menos del 10% de la población mundial por lo tanto, se verifica la independencia de las muestras.
+
+```{r}
+# Datos
+sexo <- c(rep("Mujer", 6), rep("Mujer", 4), rep("Hombre", 10), rep("Hombre", 4))
+refugio <- c(rep("Escuela", 6), rep("Centro Comercial", 4), rep("Escuela", 10), rep("Centro Comercial", 4))
+
+# Crear DataFrame
+datos <- data.frame(sexo, refugio)
+
+# Crear tabla de contingencia
+tabla <- xtabs(~ sexo + refugio, datos)
+
+# Mostrar la tabla
+print(tabla)
+```
+
+```{r}
+# Aplicar la prueba exacta de Fisher a la tabla de contingencia.
+prueba <- fisher.test(tabla)
+cat("\n")
+cat("Prueba exacta de Fisher usando la tabla de contingencia:\n")
+print(prueba)
+```
+Dado que $p = 0.6734 > \alpha = 0.05$ No hay evidencia estadísticamente significativa para afirmar que existe una relación entre el sexo de las personas y el edificio abandonado que eligieron como refugio. Es decir, las decisiones de refugiarse en la escuela o en el centro comercial no están asociadas al sexo de las personas en este contexto específico.
+
+------
