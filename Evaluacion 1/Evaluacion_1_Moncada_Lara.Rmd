@@ -1,0 +1,140 @@
+```{r, echo =FALSE, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+if (!requireNamespace('ggpattern', quietly = TRUE)){
+  install.packages('ggpattern')
+}
+library(ggpattern)
+if (!requireNamespace('dplyr', quietly = TRUE)){
+  install.packages('dplyr')
+}
+library(dplyr)
+if (!requireNamespace('ggplot2', quietly = TRUE)){
+  install.packages('ggplot2')
+}
+library(ggplot2)
+if (!requireNamespace('ggpubr', quietly = TRUE)){
+  install.packages('ggpubr')
+}
+library(ggpubr)
+if (!requireNamespace('pwr', quietly = TRUE)){
+  install.packages('pwr')
+}
+library(pwr)
+
+library(tidyr)
+if (!requireNamespace('tidyr', quietly = TRUE)){
+  install.packages('tidyr')
+}
+library(tidyr)
+library(ez)
+```
+
+# Pregunta 1
+
+
+```{r}
+# Leemos los datos del CSV
+datos <- read.csv2("Dataset PE1.csv")
+
+# Mostramos los datos iniciales
+head(datos)
+```
+
+```{r}
+datos_filtradosP1 <- datos %>% filter(SEXO == "M") %>% filter(SHAMPOO == "ChaoCaspa") %>% select(ID, SEXO, EDAD, SHAMPOO, NIVEL_3)
+datos_filtradosP1[["ID"]] <- factor(datos_filtradosP1[["ID"]])
+datos_filtradosP1[["EDAD"]] <- factor(datos_filtradosP1[["EDAD"]])
+
+head(datos_filtradosP1)
+```
+
+```{r}
+edad40 <- datos_filtradosP1 %>% filter(EDAD == "40-49")
+edad50 <- datos_filtradosP1 %>% filter(EDAD == "50-59")
+edad60 <- datos_filtradosP1 %>% filter(EDAD == "60-69")
+edad70 <- datos_filtradosP1 %>% filter(EDAD == "70 o superior")
+
+normalidad40 <- shapiro.test(edad40$NIVEL_3)
+print(normalidad40)
+
+normalidad50 <- shapiro.test(edad50$NIVEL_3)
+print(normalidad50)
+normalidad60 <- shapiro.test(edad60$NIVEL_3)
+print(normalidad60)
+normalidad70 <- shapiro.test(edad70$NIVEL_3)
+print(normalidad70)
+```
+
+```{r}
+g <- ggqqplot(datos_filtradosP1, x = "NIVEL_3", y = "EDAD", color = "EDAD")
+
+g <- g + facet_wrap(~ EDAD)
+g <- g + rremove("x.ticks") + rremove("x.text")
+g <- g + rremove("y.ticks") + rremove("y.text")
+g <- g + rremove("axis.title")
+print(g)
+```
+
+```{r}
+alfa <- 0.05
+
+omnibus <- ezANOVA(
+  data = datos_filtradosP1,
+  dv = NIVEL_3, between = EDAD, wid = ID,
+  return_aov = TRUE
+)
+
+cat("Resultado de la prueba de Levene:\n")
+print(omnibus[2])
+cat("Tabla ANOVA tradicional:\n")
+print(summary(omnibus[["aov"]]))
+```
+
+```{r}
+varianza_por_edad <- datos_filtradosP1 %>%
+  group_by(EDAD) %>%
+  summarise(varianza_muestral = var(NIVEL_3, na.rm = TRUE))
+
+# Mostrar el resultado
+print(varianza_por_edad)
+
+# Calcular la razón entre la máxima y mínima varianza muestral
+max_var <- max(varianza_por_edad$varianza_muestral)
+min_var <- min(varianza_por_edad$varianza_muestral)
+razon_varianza <- max_var / min_var
+
+print(razon_varianza)
+```
+
+```{r}
+post_hoc <- TukeyHSD(omnibus[["aov"]], which = "EDAD",
+                     ordered = TRUE, conf.level = 1 - alfa)
+print(post_hoc)
+```
+
+```{r}
+g_efecto <- ezPlot(data = datos_filtradosP1, x = EDAD,
+                   dv = NIVEL_3, wid = ID, between = EDAD,
+                   y_lab = " Micromolares presentes en el cuero cabelludo [uM]")
+
+g_efecto <- g_efecto + theme_pubr()
+print(g_efecto)
+```
+
+
+```{r}
+datos_filtradosP2 <- datos %>% filter(SEXO == "F") %>% filter(SHAMPOO == "Placebo") %>% select(ID, SEXO, SHAMPOO, PERCEPCION_3, PERCEPCION_6)
+
+head(datos_filtradosP2)
+```
+
+```{r}
+
+```
+
+
+
+
+
+
