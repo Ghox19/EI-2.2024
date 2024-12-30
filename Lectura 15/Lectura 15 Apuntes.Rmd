@@ -1,0 +1,260 @@
+---
+title: "Lectura 15 Apuntes"
+output: html_document
+---
+
+Script 15.1: Construcción y Evaluación de un Modelo de Regresión Logística
+
+```{r}
+# Cargar librerías necesarias
+library(caret)
+library(dplyr)
+library(ggpubr)
+library(pROC)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5) |>
+  mutate(am = factor(am, levels = c(1, 0), 
+                     labels = c("manual", "automático")))
+
+# Separar conjuntos de entrenamiento y prueba
+set.seed(101)
+n <- nrow(datos)
+i_muestra <- sample.int(n = n, size = floor(0.7 * n), replace = FALSE)
+datos_ent <- datos[i_muestra, ]
+datos_pru <- datos[-i_muestra, ]
+
+# Ajustar modelo
+modelo <- glm(am ~ wt, family = binomial(link = "logit"), data = datos_ent)
+print(summary(modelo))
+
+# Evaluar el modelo con el conjunto de entrenamiento
+probs_ent <- fitted(modelo)
+
+# Graficar curva ROC, indicando AUC obtenido
+ROC_ent <- roc(datos_ent[["am"]], probs_ent)
+texto_ent <- sprintf("AUC = %.2f", ROC_ent[["auc"]])
+g_roc_ent <- ggroc(ROC_ent, color = 2)
+g_roc_ent <- g_roc_ent + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1),
+                                     linetype = "dashed")
+g_roc_ent <- g_roc_ent + annotate("text", x = 0.3, y = 0.3, label = texto_ent)
+g_roc_ent <- g_roc_ent + theme_pubr()
+print(g_roc_ent)
+
+# Obtener las predicciones
+umbral <- 0.5
+preds_ent <- sapply(probs_ent, function(p) 
+                    ifelse(p >= umbral, "automático", "manual"))
+preds_ent <- factor(preds_ent, levels = levels(datos[["am"]]))
+
+# Obtener y mostrar estadísticas de clasificación en datos de entrenamiento
+mat_conf_ent <- confusionMatrix(preds_ent, datos_ent[["am"]], 
+                               positive = "automático")
+cat("\n\nEvaluación del modelo (cjto. de entrenamiento):\n")
+cat("----------------------------------------\n")
+print(mat_conf_ent[["table"]])
+cat("\n")
+cat(sprintf("    Exactitud: %.3f\n", mat_conf_ent[["overall"]]["Accuracy"]))
+cat(sprintf(" Sensibilidad: %.3f\n", mat_conf_ent[["byClass"]]["Sensitivity"]))
+cat(sprintf("Especificidad: %.3f\n", mat_conf_ent[["byClass"]]["Specificity"]))
+
+# Evaluar el modelo con el conjunto de prueba
+probs_pru <- predict(modelo, datos_pru, type = "response")
+
+# Graficar curva ROC, indicando AUC obtenido
+ROC_pru <- roc(datos_pru[["am"]], probs_pru)
+texto_pru <- sprintf("AUC = %.2f", ROC_pru[["auc"]])
+g_roc_pru <- ggroc(ROC_pru, color = 2)
+g_roc_pru <- g_roc_pru + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1),
+                                     linetype = "dashed")
+g_roc_pru <- g_roc_pru + annotate("text", x = 0.3, y = 0.3, label = texto_pru)
+g_roc_pru <- g_roc_pru + theme_pubr()
+print(g_roc_pru)
+
+# Obtener las predicciones (con el mismo umbral)
+preds_pru <- sapply(probs_pru, function(p) 
+                    ifelse(p >= umbral, "automático", "manual"))
+preds_pru <- factor(preds_pru, levels = levels(datos[["am"]]))
+
+# Obtener y mostrar estadísticas de clasificación en datos de prueba
+mat_conf_pru <- confusionMatrix(preds_pru, datos_pru[["am"]], 
+                               positive = "automático")
+cat("\n\nEvaluación del modelo (cjto. de prueba):\n")
+cat("----------------------------------------\n")
+print(mat_conf_pru[["table"]])
+cat("\n")
+cat(sprintf("    Exactitud: %.3f\n", mat_conf_pru[["overall"]]["Accuracy"]))
+cat(sprintf(" Sensibilidad: %.3f\n", mat_conf_pru[["byClass"]]["Sensitivity"]))
+cat(sprintf("Especificidad: %.3f\n", mat_conf_pru[["byClass"]]["Specificity"]))
+```
+
+El código presentado implementa un modelo de regresión logística para predecir el tipo de transmisión (manual o automática) de automóviles basándose en su peso. Está estructurado en tres partes principales: primero, realiza la preparación de datos filtrando los vehículos con pesos entre 2 y 5 unidades y convirtiendo la variable de transmisión en un factor con niveles "manual" y "automático"1
+. Segundo, divide los datos en conjuntos de entrenamiento (70%) y prueba (30%) para una evaluación robusta del modelo1
+. Finalmente, ajusta el modelo logístico y evalúa su rendimiento mediante dos métricas clave: la curva ROC con su valor AUC correspondiente y una matriz de confusión que proporciona medidas de exactitud, sensibilidad y especificidad2
+. El código también incluye visualizaciones detalladas mediante ggplot2 para la curva ROC y utiliza funciones especializadas como confusionMatrix del paquete caret para el análisis de rendimiento3
+. La implementación sigue las mejores prácticas de validación de modelos al evaluar el desempeño tanto en datos de entrenamiento como de prueba, permitiendo detectar posibles problemas de sobreajuste2
+3
+.
+
+15.2 Ajuste de un modelo de regresion logistica usand0 validacioon cruzada
+
+```{r}
+# Cargar librerías necesarias
+library(caret)
+library(data.table)
+library(dplyr)
+
+# Cargar y filtrar los datos
+datos <- mtcars |>
+  filter(wt > 2 & wt < 5) |>
+  mutate(am = factor(am, levels = c(1, 0), 
+                     labels = c("manual", "automático")))
+
+# Separar conjuntos de entrenamiento y prueba
+set.seed(101)
+n <- nrow(datos)
+i_muestra <- sample.int(n = n, size = floor(0.7 * n), replace = FALSE)
+datos_ent <- datos[i_muestra, ]
+datos_pru <- datos[-i_muestra, ]
+
+# Ajustar modelo usando validación cruzada de 4 pliegues
+modelo_ent <- train(am ~ wt, 
+                   data = datos_ent,
+                   method = "glm",
+                   family = binomial(link = "logit"),
+                   trControl = trainControl(method = "cv",
+                                         number = 4,
+                                         savePredictions = TRUE))
+modelo <- modelo_ent[["finalModel"]]
+
+# Mostrar resultados del modelo
+cat("Modelo RLog :\n")
+cat("------------\n")
+print(summary(modelo))
+
+# Evaluar el modelo con datos de entrenamiento
+mat_conf_ent <- confusionMatrix(modelo_ent[["pred"]][["pred"]], 
+                               modelo_ent[["pred"]][["obs"]], 
+                               positive = "automático")
+cat("\nEvaluación del modelo (cjto. de entrenamiento):\n")
+cat("----------------------------------------\n")
+print(mat_conf_ent[["table"]])
+cat("\n")
+cat(sprintf("    Exactitud: %.3f\n", mat_conf_ent[["overall"]]["Accuracy"]))
+cat(sprintf(" Sensibilidad: %.3f\n", mat_conf_ent[["byClass"]]["Sensitivity"]))
+cat(sprintf("Especificidad: %.3f\n", mat_conf_ent[["byClass"]]["Specificity"]))
+
+# Mostrar resultados por pliegue
+cat("\n\nDetalle por pliegue:\n")
+cat("-------------------\n")
+resumen <- data.table(modelo_ent[["resample"]][, c(1, 3)])
+resumen <- rbind(resumen, list(modelo_ent[["results"]][[2]], "Mean"))
+resumen <- rbind(resumen, list(modelo_ent[["results"]][[4]], "SD"))
+print(resumen[1:4, ], row.names = FALSE)
+cat("-------------------\n")
+print(resumen[5:6, ], row.names = FALSE, col.names = "none", digits = 3)
+
+```
+
+
+El código implementa un modelo de regresión logística con validación cruzada de 4 pliegues para predecir el tipo de transmisión de automóviles basándose en su peso. La implementación incluye la preparación inicial de datos, donde se filtran vehículos con pesos entre 2 y 5 unidades y se convierte la variable de transmisión en un factor. Utiliza la función train() del paquete caret para realizar la validación cruzada, guardando las predicciones para su posterior análisis. El código evalúa el rendimiento del modelo mediante una matriz de confusión y métricas como exactitud, sensibilidad y especificidad, proporcionando además un desglose detallado del rendimiento por cada pliegue de la validación cruzada, incluyendo la media y desviación estándar de la exactitud entre los pliegues.
+
+15.3 Busqueda de un Rlog utilizando regresion escalonada
+
+```{r}
+# Cargar librerías necesarias
+library(ggpubr)
+library(dplyr)
+
+# Cargar y filtrar datos
+datos <- mtcars |>
+  filter(wt > 2 & wt < 5) |>
+  select(-c("cyl", "vs", "gear", "carb")) |>
+  mutate(am = factor(am, levels = c(1, 0), 
+                     labels = c("manual", "automático")))
+
+# Ajustar modelos inicial y completo
+nulo <- glm(am ~ 1, family = binomial(link = "logit"), data = datos_ent)
+maxi <- glm(am ~ ., family = binomial(link = "logit"), data = datos_ent)
+
+# Realizar selección de variables mediante regresión escalonada
+modelo <- step(nulo, 
+              scope = list(upper = maxi),
+              direction = "both",
+              trace = FALSE)
+
+# Mostrar resumen del modelo final
+print(summary(modelo))
+
+# Evaluar el modelo
+probs <- fitted(modelo)
+preds <- sapply(probs, function(p) 
+                ifelse(p >= 0.5, "automático", "manual"))
+preds <- factor(preds, levels = levels(datos[["am"]]))
+
+# Calcular y mostrar matriz de confusión
+mat_conf <- confusionMatrix(preds, datos[["am"]], 
+                           positive = "automático")
+print(mat_conf)
+```
+
+
+Este código implementa un proceso de selección de variables para un modelo de regresión logística. Comienza con la preparación de datos del conjunto mtcars, eliminando variables específicas y transformando la variable de transmisión en factor. Utiliza el método de regresión escalonada (stepwise regression) para seleccionar las variables más relevantes, comenzando con un modelo nulo (solo intercepto) y comparándolo con un modelo máximo que incluye todas las variables predictoras. El proceso de selección se realiza mediante la función step(), que evalúa iterativamente diferentes combinaciones de variables para encontrar el mejor modelo según el criterio de información de Akaike (AIC). Finalmente, evalúa el rendimiento del modelo seleccionado mediante una matriz de confusión, proporcionando métricas de clasificación como exactitud, sensibilidad y especificidad.
+
+
+15.4 Busqueda de modelo de regresion con paso adelante y atras
+
+```{r}
+# Cargar librerías necesarias
+library(ggpubr)
+library(dplyr)
+
+# Cargar y filtrar los datos
+datos <- mtcars |>
+  filter(wt > 2 & wt < 5) |>
+  select(-c("cyl", "vs", "gear", "carb")) |>
+  mutate(am = factor(am, levels = c(1, 0), 
+                     labels = c("manual", "automático")))
+
+# Separar conjuntos de entrenamiento y prueba
+set.seed(101)
+n <- nrow(datos)
+i_muestra <- sample.int(n = n, size = floor(0.7 * n), replace = FALSE)
+datos_ent <- datos[i_muestra, ]
+datos_pru <- datos[-i_muestra, ]
+
+# Definir modelos inicial y máximo
+nulo <- glm(am ~ 1, family = binomial(link = "logit"), data = datos_ent)
+maxi <- glm(am ~ ., family = binomial(link = "logit"), data = datos_ent)
+
+# Realizar regresión paso a paso manual
+cat("\nPaso 1:\n")
+cat("-----\n")
+print(add1(nulo, scope = maxi))
+
+modelo1 <- update(nulo, . ~ . + wt)
+
+cat("\nPaso 2:\n")
+cat("-----\n")
+print(add1(modelo1, scope = maxi))
+
+modelo2 <- update(modelo1, . ~ . + mpg)
+
+cat("\nPaso 3:\n")
+cat("-----\n")
+print(add1(modelo2, scope = maxi))
+
+# Mostrar modelo final
+cat("\nModelo RLog conseguido con regresión hacia adelante:\n")
+cat("------------------------------------------------\n")
+print(summary(modelo2))
+
+# Comparar modelos
+cat("Comparación de los modelos considerados:\n")
+cat("--------------------------------\n")
+print(anova(nulo, modelo1, modelo2, test = "LRT"))
+```
+
+Este código implementa un proceso de regresión logística paso a paso manual (forward stepwise regression) para predecir el tipo de transmisión de automóviles. Comienza con la preparación de datos y su división en conjuntos de entrenamiento y prueba. El proceso de selección de variables se realiza manualmente en tres pasos, comenzando con un modelo nulo y añadiendo variables una a una basándose en la reducción de la devianza y el criterio AIC. En cada paso, se evalúa la significancia de añadir nuevas variables al modelo mediante la función add1(). El código finaliza comparando los tres modelos generados (nulo, con una variable y con dos variables) utilizando una prueba de razón de verosimilitud (LRT). La implementación permite visualizar el proceso de selección de variables de manera transparente y controlada.
+

@@ -1,0 +1,607 @@
+
+
+## Script 12.1 Test Yuen para dos muestras independientes
+Incluye test de normalidad y medias truncadas
+
+```{R}
+library(WRS2)
+library(ggpubr)
+
+# Construct data frame
+a <- c(25.1, 25.2, 25.3, 25.3, 25.4, 25.4, 25.5, 25.5, 25.6, 25.8, 
+       25.8, 25.9, 25.9, 26.0, 26.0, 26.2, 26.2, 26.2, 26.3, 26.4,
+       26.5, 26.5, 26.6, 26.7, 26.7, 26.9, 26.9, 27.0, 27.1, 27.3,
+       27.8, 28.4, 28.5, 29.0, 29.8, 30.2, 31.8, 31.9, 33.3, 33.7)
+
+b <- c(24.1, 24.4, 24.4, 24.5, 24.7, 24.8, 24.8, 25.1, 25.2, 25.2,
+       25.2, 25.3, 25.4, 25.7, 25.7, 26.3, 26.3, 26.4, 26.5, 27.2,
+       27.7, 28.3, 28.4, 28.4, 28.6, 28.7, 29.6, 29.9, 30.1, 30.5)
+
+tiempo <- c(a, b)
+algoritmo <- c(rep("A", length(a)), rep("B", length(b)))
+datos <- data.frame(tiempo, algoritmo)
+
+# Check normality
+g <- ggqqplot(datos, x = "tiempo", facet.by = "algoritmo", 
+              palette = c("blue", "red"), color = "algoritmo")
+print(g)
+
+# Set significance level
+alfa <- 0.05
+
+# See 20% trimming
+gamma <- 0.2
+n_a <- length(a)
+n_b <- length(b)
+poda_a <- n_a * gamma
+poda_b <- n_b * gamma
+
+a_truncada <- a[poda_a:(n_a - poda_a)]
+b_truncada <- b[poda_b:(n_b - poda_b)]
+
+tiempo <- c(a_truncada, b_truncada)
+algoritmo <- c(rep("A", length(a_truncada)), rep("B", length(b_truncada)))
+datos_truncados <- data.frame(tiempo, algoritmo)
+
+g <- ggqqplot(datos_truncados, x = "tiempo", facet.by = "algoritmo",
+              palette = c("blue", "red"), color = "algoritmo")
+print(g)
+
+# Apply Yuen's test
+prueba <- yuen(tiempo ~ algoritmo, data = datos, tr = gamma)
+print(prueba)
+
+```
+
+
+## Script 12.2 Test Yuen con Bootstrapping
+Usa test de Yuen usando bootstrapping para comparar medias y medianas
+
+```{R}
+library(WRS2)
+
+# Construct data frame
+a <- c(25.1, 25.2, 25.3, 25.3, 25.4, 25.4, 25.5, 25.5, 25.6, 25.8,
+       25.8, 25.9, 25.9, 26.0, 26.0, 26.2, 26.2, 26.2, 26.3, 26.4,
+       26.5, 26.5, 26.6, 26.7, 26.7, 26.9, 26.9, 27.0, 27.1, 27.3,
+       27.8, 28.4, 28.5, 29.0, 29.8, 30.2, 31.8, 31.9, 33.3, 33.7)
+
+b <- c(24.1, 24.4, 24.4, 24.5, 24.7, 24.8, 24.8, 25.1, 25.2, 25.2,
+       25.2, 25.3, 25.4, 25.7, 25.7, 26.3, 26.3, 26.4, 26.5, 27.2,
+       27.7, 28.3, 28.4, 28.4, 28.6, 28.7, 29.6, 29.9, 30.1, 30.5)
+
+tiempo <- c(a, b)
+algoritmo <- c(rep("A", length(a)), rep("B", length(b)))
+datos <- data.frame(tiempo, algoritmo)
+
+# Set significance level and bootstrap samples
+alfa <- 0.05
+bootstrap <- 999
+
+# Apply test with mean
+set.seed(135)
+prueba_media <- pb2gen(tiempo ~ algoritmo, data = datos, 
+                       est = "mean", nboot = bootstrap)
+cat("\n\nResultado al usar la media como estimador\n\n")
+print(prueba_media)
+
+# Apply test with median
+set.seed(135)
+prueba_mediana <- pb2gen(tiempo ~ algoritmo, data = datos,
+                         est = "median", nboot = bootstrap)
+cat("Resultado al usar la mediana como estimador\n\n")
+print(prueba_mediana)
+
+```
+
+## 12.3 Prueba de Yuen para dos muestras pareadas
+Realiza la prueba de Yuen para comparar medias truncadas de dos muestras pareadas.
+
+```{R}
+library(WRS2)
+
+# Construir data frame
+x <- c(32.0, 32.0, 32.0, 32.0, 32.1, 32.1, 32.1, 32.2, 32.3, 32.3, 
+       32.5, 32.7, 32.7, 32.7, 33.1, 33.4, 33.9, 34.1, 34.2, 34.5,
+       36.0, 36.6, 36.7, 37.2, 38.0)
+
+y <- c(33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.3, 33.3, 33.3, 33.3,
+       33.5, 33.6, 33.7, 33.9, 33.9, 34.2, 34.2, 34.3, 34.3, 34.4,
+       34.5, 34.6, 36.4, 38.9, 40.2)
+
+# Fijar nivel de significación
+alfa <- 0.05
+
+# Aplicar prueba de Yuen para muestras pareadas
+gamma <- 0.2
+prueba <- yuend(x = x, y = y, tr = gamma)
+print(prueba)
+```
+
+
+## 12.4 Comparaciones robustas para múltiples grupos independientes
+Realiza comparaciones entre múltiples grupos usando métodos robustos
+```{R}
+library(WRS2)
+
+# Construir data frame
+a <- c(25.1, 25.2, 25.3, 25.3, 25.4, 25.4, 25.5, 25.5, 25.6, 25.8,
+       25.8, 25.9, 25.9, 26.0, 26.0, 26.2, 26.2, 26.2, 26.3, 26.4,
+       26.5, 26.5, 26.6, 26.7, 26.7, 26.9, 26.9, 27.0, 27.1, 27.3,
+       27.8, 28.4, 28.5, 29.0, 29.8, 30.2, 31.8, 31.9, 33.3, 33.7)
+
+b <- c(24.1, 24.4, 24.4, 24.5, 24.7, 24.8, 24.8, 25.1, 25.2, 25.2,
+       25.2, 25.3, 25.4, 25.7, 25.7, 26.3, 26.3, 26.4, 26.5, 27.2,
+       27.7, 28.3, 28.4, 28.4, 28.6, 28.7, 29.6, 29.9, 30.1, 30.5)
+
+c <- c(24.5, 24.5, 24.5, 24.5, 24.5, 24.5, 24.6, 24.6, 24.6, 24.6,
+       24.6, 24.6, 24.7, 24.7, 24.7, 24.7, 24.8, 25.0, 25.0, 25.0,
+       25.2, 25.2, 25.2, 25.2, 25.5, 25.7, 25.9, 26.2, 26.5, 26.5,
+       26.7, 27.0, 29.2, 29.9, 30.1)
+
+tiempo <- c(a, b, c)
+algoritmo <- c(rep("A", length(a)), rep("B", length(b)), rep("C", length(c)))
+datos <- data.frame(tiempo, algoritmo)
+
+# Fijar nivel de significación
+alfa <- 0.05
+
+# Comparar los diferentes algoritmos usando medias truncadas
+gamma <- 0.2
+set.seed(666)
+medias_truncadas <- t1way(tiempo ~ algoritmo, data = datos, tr = gamma, alpha = alfa)
+print(medias_truncadas)
+
+if(medias_truncadas$p.value < alfa) {
+    cat("\nProcedimiento post-hoc\n\n")
+    set.seed(666)
+    post_hoc <- lincon(tiempo ~ algoritmo, data = datos, tr = gamma, alpha = alfa)
+    print(post_hoc)
+}
+
+```
+
+
+## 12.5 Alternativa robusta para comparar múltiples grupos correlacionados
+
+```{R}
+library(WRS2)
+library(tidyverse)
+
+# Construir data frame
+X <- c(32.0, 32.0, 32.0, 32.0, 32.1, 32.1, 32.1, 32.2, 32.3, 32.3,
+       32.5, 32.7, 32.7, 32.7, 33.1, 33.4, 33.9, 34.1, 34.2, 34.5,
+       36.0, 36.6, 36.7, 37.2, 38.0)
+
+Y <- c(33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.3, 33.3, 33.3, 33.3,
+       33.5, 33.6, 33.7, 33.9, 33.9, 34.2, 34.2, 34.3, 34.3, 34.4,
+       34.5, 34.6, 36.4, 38.9, 40.2)
+
+Z <- c(32.0, 32.2, 32.5, 32.6, 32.7, 32.7, 32.7, 33.0, 33.2, 33.4,
+       33.6, 33.6, 33.9, 34.1, 34.2, 34.4, 34.4, 34.5, 34.6, 34.7,
+       36.3, 36.6, 36.7, 38.9, 39.2)
+
+tiempo <- c(X, Y, Z)
+algoritmo <- rep(c("X", "Y", "Z"), each = length(X))
+sujeto <- rep(1:length(X), 3)
+datos <- data.frame(tiempo, algoritmo, sujeto)
+
+# Fijar nivel de significación
+alfa <- 0.05
+
+# Comparar los diferentes algoritmos usando medias truncadas
+gamma <- 0.2
+prueba <- rmanova(y = tiempo, groups = algoritmo, blocks = sujeto, tr = gamma)
+print(prueba)
+
+if(prueba$p.value < alfa) {
+    cat("\nProcedimiento post-hoc\n\n")
+    post_hoc <- rmmcp(y = tiempo, groups = algoritmo, blocks = sujeto,
+                      tr = gamma, alpha = alfa)
+    print(post_hoc)
+}
+```
+
+## 12.6: Bootstrapping para una muestra
+```{R}
+library(boot)
+library(bootES)
+
+# Crear muestra inicial y calcular la media
+muestra <- c(79, 75, 84, 75, 94, 82, 76, 90, 79, 88)
+datos <- data.frame(muestra)
+
+# Establecer cantidad de remuestreos y nivel de significación
+B <- 2000
+alfa <- 0.01
+
+# Función para calcular el estadístico: media de la remuestra
+media <- function(valores, i) {
+    mean(valores[i])
+}
+
+# Construir la distribución bootstrap usando el paquete boot
+set.seed(432)
+distribucion_b <- boot(muestra, statistic = media, R = B)
+
+# Mostrar y graficar la distribución bootstrap
+cat("*** Paquete 'boot' ***\n")
+print(distribucion_b)
+plot(distribucion_b)
+
+# Construir y mostrar los intervalos de confianza
+ics <- boot.ci(distribucion_b, conf = 1 - alfa, 
+               type = c("norm", "perc", "bca"))
+cat("\n\n")
+print(ics)
+
+# Construir distribución bootstrap usando el paquete bootES
+set.seed(432)
+distribucion_bES <- bootES(muestra, R = B, ci.type = "bca",
+                          ci.conf = 1 - alfa, plot = TRUE)
+
+# Mostrar bootstrap obtenida con bootES
+cat("\n\n*** Paquete 'bootES' ***\n")
+print(distribucion_bES)
+```
+
+## Script 12.7 Inferencia sobre la media de una muestra con bootstrapping
+Realiza inferencia estadística sobre la media de una muestra usando bootstrapping.
+```{R}
+library(boot)
+
+# Crear muestra inicial, mostrar su histograma y calcular la media
+muestra <- c(79, 75, 84, 75, 94, 82, 76, 90, 79, 88)
+valor_observado <- mean(muestra)
+datos <- data.frame(muestra)
+
+# Construir distribución bootstrap
+B <- 2000
+media <- function(valores, i) {
+    mean(valores[i])
+}
+
+set.seed(432)
+distribucion_b <- boot(muestra, statistic = media, R = B)
+
+# Desplazar la distribución bootstrap para que se centre en
+# el valor nulo
+valor_nulo <- 75
+desplazamiento <- mean(distribucion_b[["t"]]) - valor_nulo
+distribucion_nula <- distribucion_b[["t"]] - desplazamiento
+
+# Determinar el valor p
+p <- (sum(distribucion_nula > valor_observado) + 1) / (B + 1)
+cat("Valor p:", p)
+```
+
+
+## 12.8: Bootstrapping para la diferencia de dos medias
+Realiza bootstrapping para comparar las medias de dos muestras independientes.
+```{R}
+library(boot)
+library(ggpubr)
+library(simpleboot)
+
+# Ingresar datos originales
+hombres <- c(1.3, 1.5, 1.6, 1.7, 1.7, 1.9, 2.3, 2.4, 2.6, 2.6, 2.7, 2.8, 3.2, 3.7, 
+             4.1, 4.4, 4.5, 4.8, 5.2, 5.2, 5.3, 5.5, 5.5, 5.6, 5.6, 5.7, 5.7)
+mujeres <- c(3.5, 3.6, 3.8, 4.3, 4.5, 4.5, 4.9, 5.1, 5.3, 5.3, 5.5, 5.8, 6.0, 
+             6.3, 6.3, 6.4, 6.4, 6.6, 6.7)
+n_hombres <- length(hombres)
+n_mujeres <- length(mujeres)
+
+# Comprobar normalidad de las muestras
+print(shapiro.test(hombres))
+print(shapiro.test(mujeres))
+
+# Calcular y mostrar la diferencia observada entre las medias muestrales
+media_hombres <- mean(hombres)
+media_mujeres <- mean(mujeres)
+diferencia_obs <- media_hombres - media_mujeres
+cat("Media hombres:", round(media_hombres,3), "\n")
+cat("Media mujeres:", round(media_mujeres,3), "\n")
+cat("Diferencia observada:", round(diferencia_obs, 3), "\n")
+cat("\n")
+
+# Crear la distribución bootstrap
+B <- 9999
+set.seed(432)
+distribucion_b <- two.boot(hombres, mujeres, FUN = mean, R = B)
+
+# Examinar la distribución bootstrap
+datos <- data.frame(diferencias = distribucion_b[["t"]])
+g_hist <- gghistogram(datos, x = "diferencias", bins = 100,
+                      xlab = "Diferencia de medias", ylab = "Frecuencia")
+g_qq <- ggqqplot(datos, x = "diferencias")
+```
+
+
+## 12.9: Bootstrapping para inferencia sobre la media de diferencias pareadas
+Realiza bootstrapping para inferir sobre la media de las diferencias entre dos muestras pareadas.
+```{R}
+library(bootES)
+set.seed(432)
+
+# Ingresar datos originales
+prueba_1 <- c(3.5, 2.7, 1.0, 1.8, 1.6, 4.3, 5.8, 6.4, 3.9, 4.3, 
+              3.4, 5.3, 5.8, 5.3, 2.0, 1.3, 4.0, 5.3, 1.6, 3.6)
+prueba_2 <- c(5.2, 5.1, 5.9, 4.8, 1.4, 2.3, 6.8, 5.3, 3.1, 3.8, 
+              4.6, 1.2, 3.9, 2.0, 1.7, 3.3, 6.0, 4.8, 6.9, 1.3)
+
+# Calcular la diferencia entre ambas observaciones
+diferencia <- prueba_2 - prueba_1
+
+# Calcular la media observada de las diferencias
+valor_observado <- mean(diferencia)
+
+# Generar la distribución bootstrap y su intervalo de confianza
+B <- 3999
+alfa <- 0.05
+distribucion_bES <- bootES(diferencia, R = B, ci.type = "bca", 
+                          ci.conf = 1 - alfa, plot = FALSE)
+
+# Desplazar la distribución bootstrap para reflejar la hipótesis nula
+valor_nulo <- 0.5
+desplazamiento <- mean(distribucion_bES[["t"]]) - valor_nulo
+distribucion_nula <- distribucion_bES[["t"]] - desplazamiento
+
+# Determinar el valor p
+p <- (sum(abs(distribucion_nula) > abs(valor_observado)) + 1) / (B + 1)
+
+# Mostrar los resultados
+cat("Media de las diferencia observada:", round(valor_observado, 3), "\n\n")
+cat("Distribución bootstrap e intervalo de confianza:\n")
+print(distribucion_bES)
+cat("Valor p:", round(p, 3), "\n")
+```
+
+##  13.1: Ajuste de una regresión lineal simple
+Ajusta un modelo de regresión lineal simple para predecir la potencia del motor usando el volumen de los cilindros.
+```{R}
+library(dplyr)
+library(ggpubr)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> filter(wt > 2 & wt < 5)
+
+# Ajustar modelo con R
+modelo <- lm(hp ~ disp, data = datos)
+print(summary(modelo))
+
+# Graficar los datos y el modelo obtenido
+g1 <- ggscatter(datos, x = "disp", y = "hp", 
+                color = "steelblue", fill = "steelblue",
+                ylab = "Potencia [hp]")
+g1 <- g1 + geom_abline(intercept = coef(modelo)[1], 
+                       slope = coef(modelo)[2], color = "red")
+g1 <- g1 + xlab(bquote("Volumen útil de los cilindros" ~ 
+                       group("[", "in"-3, "]")))
+
+# Definir valores del predictor para vehículos no incluidos
+disp <- c(169.694, 230.214, 79.005, 94.085, 343.085, 
+          136.073, 357.305, 288.842, 223.128, 129.217, 
+          146.432, 193.474, 376.874, 202.566, 114.928)
+
+# Usar el modelo para predecir
+potencia_est <- predict(modelo, data.frame(disp))
+
+# Graficar los valores predichos
+nuevos <- data.frame(disp, hp = potencia_est)
+g2 <- ggscatter(nuevos, x = "disp", y = "hp",
+                color = "purple", fill = "purple",
+                ylab = "Potencia [hp]")
+g2 <- g2 + xlab(bquote("Volumen útil de los cilindros" ~ 
+                       group("[", "in"-3, "]")))
+
+# Unir los gráficos en uno solo
+g1 <- ggpar(g1, xlim = c(75, 405), ylim = c(60, 340))
+g2 <- ggpar(g2, xlim = c(75, 405), ylim = c(60, 340))
+g <- ggarrange(g1, g2, 
+               labels = c("Modelo", "Predicciones"),
+               hjust = c(-1.2, -0.7))
+print(g)
+```
+
+## 13.2: Regresión lineal simple con predictor dicotómico
+Ajusta un modelo de regresión lineal usando una variable categórica binaria (forma del motor) como predictor.
+```{R}
+library(ggpubr)
+
+# Obtener los datos
+datos <- mtcars |> filter(wt > 2 & wt < 5)
+
+# Verificar correlación
+print(cor(datos[, c("hp", "am", "vs")]))
+
+# Ajustar modelo con R
+modelo_vs <- lm(hp ~ vs, data = datos)
+print(summary(modelo_vs))
+
+# Graficar el modelo
+g1 <- ggscatter(datos, x = "vs", y = "hp",
+                color = "steelblue", fill = "steelblue",
+                xlab = "Forma del motor", ylab = "Potencia [hp]",
+                xticks.by = 1)
+g1 <- g1 + geom_abline(intercept = coef(modelo_vs)[1],
+                       slope = coef(modelo_vs)[2], color = "red")
+print(g1)
+
+# Graficar residuos
+residuos <- modelo_vs[["residuals"]]
+datos <- cbind(datos, residuos)
+g2 <- ggscatter(datos, x = "vs", y = "residuos",
+                color = "steelblue", fill = "steelblue",
+                xlab = "Forma del motor", ylab = "Residuos [hp]",
+                xticks.by = 1)
+g2 <- g2 + geom_hline(yintercept = 0, color = "red")
+
+# Unir los gráficos en uno solo
+g <- ggarrange(g1, g2,
+               labels = c("Modelo", "Residuos"),
+               hjust = c(-2.5, -2.0))
+print(g)
+```
+
+## 13.3: Evaluación de un modelo de regresión lineal simple 
+Realiza diagnóstico de un modelo de regresión lineal simple mediante gráficos de residuos y pruebas estadísticas.
+```{R}
+library(car)
+library(dplyr)
+library(ggpubr)
+
+
+# Cargar datos y ajustar modelo
+datos <- mtcars |> filter(wt > 2 & wt < 5)
+
+# Ajustar modelo con R
+modelo <- lm(hp~disp, data = datos)
+
+# Desplegar graficos de residuos y mostrar pruebas de curvatura
+cat("Pruebas de curvatura")
+redidualPlots(modelo, type = "rstandard", id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+              col = "steelblue", pch = 20, col.quad = "red")
+
+set.seed(19)
+db <- durbinWatsonTest(modelo)
+cat("\nPrueba de independencia: \n")
+print(db)
+
+# Desplegar graficos marginales
+marginalModelPlots(modelo, st = TRUE,
+                   id = list(method = "r", n = 3, cex = 0.7, location = "lr"),
+                   col = "steelblue", pch = 20, col.line = c("steelblue", "red"))
+
+# Prueba de la varianza del error no constante
+cat("\nPrueba de homocedasticidad:\n")
+print(ncvTest(modelo))
+
+# Desplegar graficos de influencia
+casos_influyentes <- influencePlot(modelo, id = list(cex = 0.7))
+cat("\nCasos que podrian ser influyentes:\n")
+print(casos_influyentes)
+```
+
+## 13.4 Ajuste de una regresion lineal simple usando validacion cruzada
+```{R}
+# Cargar y filtrar los datos
+datos <- mtcars |> filter(wt > 2 & wt<5)
+n <- nrow(datos)
+
+# Crear conjuntos de entrenamiento y prueba
+set.seed(101)
+n_entrenamiento <- floor(0.8 * n)
+i_entrenamiento <- sample.int(n = n, size = n_entrenamiento, replace = FALSE)
+entrenamiento <- datos[i_entrenamiento, ]
+prueba <- datos[-i_entrenamiento, ]
+
+# Ajustar y mostrar el modelo con el conjunto de entrenamiento
+modelo <- lm(hp~disp, data = entrenamiento)
+print(summary(modelo))
+
+# Calcular error cuadrado promedio para el conjunto de entrenamiento
+rmse_entrenamiento <- sqrt(mean(resid(modelo) ** 2))
+cat("MSE para el conjunto de entrenamiento:", rmse_entrenamiento, "\n")
+
+# Hacer predicciones para el conjunto de prueba
+predicciones <- predict(modelo, prueba)
+
+# Calcular error cuadrado promedio para el conjunto de prueba
+error <- prueba[["hp"]] - predicciones
+rmse_prueba <- sqrt(mean(error ** 2))
+cat("MSE para el conjunto de prueba: ", rmse_prueba)
+```
+
+## Script 13.5 Ajuste de una regresion lineal simple usando validacion cruzada de cinco pliegues
+```{R}
+library(caret)
+library(dplyr)
+
+## Cargar y filtrar los datos
+datos <- mtcars |> filter(wt > 2 & wt < 5)
+n <- nrow(datos)
+
+# Ajustar y mostrar el modelo usando validacion cruzada de 5 pliegues
+set.seed(111)
+entrenamiento <- train(hp ~ disp, data = datos, method = "lm",
+                       trControl = trainControl(method = "cv", number = 5))
+modelo <- entrenamiento[["finalModel"]]
+print(summary(modelo))
+
+# Mostrar los resultados de cada pliegues
+cat("Errores en cada pliegue: \n")
+print(entrenamiento[["resample"]])
+
+# Mostrar el resultado estimado para el modelo
+cat("\nError estimado para el modelo: \n")
+print(entrenamiento[["results"]])
+
+```
+
+
+
+## 14.1: Regresión lineal múltiple básica
+Ajusta un modelo de regresión lineal múltiple para predecir la potencia del motor usando dos predictores.
+```
+library(dplyr)
+library(scatterplot3d)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> filter(wt > 2 & wt < 5)
+
+# Ajustar modelo de LRM
+modelo <- lm(hp ~ disp + wt, data = datos)
+print(summary(modelo))
+
+# Graficar modelo ajustado, diferencia valores sobre y bajo el plano
+i_color <- 1 + (resid(modelo) > 0)
+g <- scatterplot3d(
+  datos[["disp"]], datos[["wt"]], datos[["hp"]],
+  type = "p",
+  angle = 20,
+  pch = 16,
+  color = c("darkorange", "steelblue")[i_color],
+  xlab = bquote("Volumen útil de los cilindros" ~ group("[", "in"-3, "]")),
+  ylab = "Potencia [hp]",
+  zlab = "Peso [lb x 1000]"
+)
+g$plane3d(modelo, draw_lines = TRUE, lty = "dotted")
+
+# Definir valores de los predictores para vehiculos no incluidos
+disp <- c(246.54, 185.015, 317.097, 403.338, 325.263, 336.128, 
+          200.359, 327.478, 232.06, 382.015)
+wt <- c(3.307, 2.965, 3.699, 4.178, 3.744, 3.804, 3.050, 3.756, 
+        3.226, 4.059)
+datos_nuevos <- data.frame(disp, wt)
+
+# Usar el modelo para predecir
+hp_est <- predict(modelo, newdata = datos_nuevos)
+datos_nuevos <- cbind(datos_nuevos, hp_est)
+cat("Predicciones:\n")
+print(datos_nuevos)
+```
+
+## 14.2: Manejo de Variables Categóricas
+Demuestra cómo crear y manejar variables indicadoras (dummy) para variables categóricas en regresión lineal múltiple.
+
+```{R}
+library(dummy)
+# Crear matriz de datos
+persona <- 1:9
+sexo <- c("F", "F", "M", "M", "M", "M", "F", "M", "F")
+tipo <- c("B", "D", "A", "B", "A", "C", "D", "D", "D")
+valor <- c(1.68, 2.79, 1.92, 2.26, 2.1, 2.63, 2.19, 3.62, 2.76)
+datos <- data.frame(persona, sexo, tipo, valor)
+
+# Crear variables artificiales
+datos.dummy <- dummy(datos)
+datos.dummy[["sexo_F"]] <- NULL 
+datos.dummy[["tipo_A"]] <- NULL
+datos.dummy[["valor"]] <- datos[["valor"]]
+
+# Crear modelo con variables indicadoras
+modelo <- lm(valor ~ sexo_M + tipo_B + tipo_C + tipo_D, datos.dummy)
+
+modelo_directo <- lm(valor ~ sexo + tipo, datos)
+
+```

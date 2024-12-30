@@ -1,0 +1,261 @@
+---
+title: "Tarea - 8"
+author: "Grupo 10"
+date: "2024-11-20"
+output: html_document
+---
+```{r}
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(ggpubr)) install.packages("ggpubr")
+if(!require(ggmosaic)) install.packages("ggmosaic")
+if(!require(kableExtra)) install.packages("kableExtra")
+
+if(!require(pwr)) install.packages("pwr")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(rcompanion)) install.packages("rcompanion")
+if(!require(RVAideMemoire)) install.packages("RVAideMemoire")
+if(!require(ez)) install.packages("ez")
+if(!require(nlme)) install.packages("nlme")
+if(!require(emmeans)) install.packages("emmeans")
+
+```
+
+
+1. Propongan una pregunta de investigación original, que involucre la comparación de una frecuencia de un evento o característica en dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla propia, seleccionen una muestra aleatoria de hogares (100 < n < 150) y respondan la pregunta propuesta utilizando una prueba de permutaciones Monte Carlo. Indicación: creen su propio código, específicamente para este problema, no usen directamente el script del apunte.   
+
+*"¿El ingreso promedio de los hombres solteros que trabajan en Maipú es igual al ingreso promedio de los hombres solteros que trabajan en Puente Alto?"*
+
+```{r}
+datos <- read.csv("EP08 Datos CASEN 2017.csv")
+
+datosHombresSolteros_lasCondes <- datos %>% filter(sexo == "Hombre"
+                                             & ecivil == "Soltero(a)"
+                                             & ch1 == "Asalariado"
+                                             & comuna == "Las Condes")  %>% select(ytot)
+
+datosHombresSolteros_puenteAlto <- datos %>% filter(sexo == "Hombre"
+                                             & ecivil == "Soltero(a)"
+                                             & ch1 == "Asalariado"
+                                             & comuna == "Puente Alto")  %>% select(ytot)
+```
+
+**Formulamos las hipotesis:**
+
+**Ho: "Las medias de los ingresos promedios de los hombres es igual en ambas comunas."**
+
+**Ha: "Las medias de los ingresos promedios de los hombres son distintas entre ambas comunas."**
+
+vamos a establecer un valor de significancia del 0,05.
+
+Con lo anterior planteado, vamos a remuestrar nuestro estimador puntual el cual sería la media de los ingresos entre las comunas, para así verificar si hay diferencia entre los ingresos.
+
+```{r}
+num_hombres_lasCondes <- length(datosHombresSolteros_lasCondes)
+num_hombres_puenteAlto <- length(datosHombresSolteros_puenteAlto)
+
+media_ytot_lasCondes <- mean(datosHombresSolteros_lasCondes$ytot)
+media_ytot_puenteAlto <- mean(datosHombresSolteros_puenteAlto$ytot)
+
+set.seed(918)
+num_replicas <- 5999
+
+permuta_muestras <- function(i, grupo1, grupo2) {
+  tam_grupo1 <- length(grupo1)
+  combinado <- c(grupo1, grupo2)
+  total <- length(combinado)
+  permutado <- sample(combinado, total, replace = FALSE)
+  nuevo_grupo1 <- permutado[1:tam_grupo1]
+  nuevo_grupo2 <- permutado[(tam_grupo1 + 1):total]
+  list(nuevo_grupo1, nuevo_grupo2)
+}
+
+calcula_diferencia <- function(muestras, funcion) {
+  grupo1 <- muestras[[1]]
+  grupo2 <- muestras[[2]]
+  diferencia <- funcion(grupo1) - funcion(grupo2)
+  diferencia
+}
+
+calcula_valor_p <- function(distribucion, valor_observado, num_replicas, alternativa) {
+  if (alternativa == "two.sided") {
+    p_valor <- (sum(abs(distribucion) > abs(valor_observado)) + 1) / (num_replicas + 1)
+  } else if (alternativa == "greater") {
+    p_valor <- (sum(distribucion > valor_observado) + 1) / (num_replicas + 1)
+  } else {
+    p_valor <- (sum(distribucion < valor_observado) + 1) / (num_replicas + 1)
+  }
+  p_valor
+}
+
+graficar <- function(distribucion, ...) {
+  datos <- data.frame(distribucion)
+  histograma <- gghistogram(datos, x = "distribucion", xlab = "Estadístico", ylab = "Frecuencia", bins = 30, ...)
+  qq <- ggqqplot(datos, x = "distribucion", ...)
+  figura <- ggarrange(histograma, qq, ncol = 2, nrow = 1)
+  print(figura)
+}
+
+prueba_permutaciones <- function(grupo1, grupo2, num_replicas, funcion, alternativa, plot, ...) {
+  cat("Prueba de Permutaciones\n\n")
+  cat("Hipótesis Alternativa:", alternativa, "\n")
+  observado <- calcula_diferencia(list(grupo1, grupo2), funcion)
+  cat("Valor Observado:", observado, "\n")
+
+  permutaciones <- lapply(1:num_replicas, permuta_muestras, grupo1, grupo2)
+  distribucion <- sapply(permutaciones, calcula_diferencia, funcion)
+
+  if (plot) {
+    graficar(distribucion, ...)
+  }
+
+  p_valor <- calcula_valor_p(distribucion, observado, num_replicas, alternativa)
+  cat("Valor p:", p_valor, "\n\n")
+}
+
+prueba_permutaciones(datosHombresSolteros_lasCondes$ytot,
+                     datosHombresSolteros_puenteAlto$ytot,
+                     num_replicas,
+                     mean,
+                     "two.sided", TRUE,
+                     color = "blue", fill = "blue")
+
+prueba_permutaciones(datosHombresSolteros_lasCondes$ytot,
+                     datosHombresSolteros_puenteAlto$ytot,
+                     num_replicas, var,
+                     "two.sided",
+                     FALSE)
+
+```
+**Conclusión:**   
+*"Como podemos apreciar de los datos obtenidos, el valor p es menor al valor de significancia, por lo cual, hay evidencia suficiente para rechazar la hipotesis nula en favor de la hipotesis alternativa, y podemos decir con un 95% de confianza, que la media de los hombres solteros entre Las Condes y Puente Alto son distintas"*
+
+
+2. Propongan una pregunta de investigación original, que involucre la comparación de las medias de más de dos grupos independientes (más abajo se dan unos ejemplos). Fijando una semilla distinta a la anterior, seleccionen una muestra aleatoria de hogares (200 < n < 300) y respondan la pregunta propuesta utilizando bootstrapping. Solo por ejercicio académico, aplique un análisis post-hoc con bootstrapping aunque este no fuera necesario. Indicación: consideren que el análisis post-hoc debe hacerse con las mismas remuestras usadas para la prueba ómnibus.
+
+
+**Hipótesis nula (H0): No hay diferencia en las tasas de preferencia por trabajos asalariados entre las generaciones (Gen X, Millennial, Gen Z). Esto implica que el rango etario no influye en la preferencia por trabajos asalariados en las comunas.**
+
+**Hipótesis alternativa (Ha): Existen diferencias significativas en las tasas de preferencia por trabajos asalariados entre las generaciones, lo que sugiere que el rango etario sí influye en la preferencia por trabajos asalariados en las comunas.**
+
+
+```{r}
+# Cargar librerías necesarias
+library(dplyr)
+library(ggplot2)
+library(car)
+
+# Cargar los datos
+datos <- read.csv("EP08 Datos CASEN 2017.csv")
+
+# Crear grupos etarios (generaciones)
+datos <- datos %>%
+  mutate(generacion = case_when(
+    edad >= 16 & edad <= 24 ~ "Gen Z",
+    edad >= 25 & edad <= 39 ~ "Millennial",
+    edad >= 40 & edad <= 54 ~ "Gen X",
+    TRUE ~ NA_character_
+  ))
+
+# Filtrar datos relevantes: generación y ocupación válida
+datos_filtrados <- datos %>%
+  filter(!is.na(generacion), comuna %in% c("La Florida", "La Reina", "Las Condes", "Maipú")) %>%
+  mutate(es_asalariado = ifelse(ch1 == "Asalariado", 1, 0))
+
+# Verificar las primeras filas
+head(datos_filtrados)
+
+#-------------------------------------------------------------------------------
+# Calcular tasas de empleo
+tasa_empleo <- datos_filtrados %>%
+  group_by(comuna, generacion) %>%
+  summarise(
+    total_personas = n(),
+    asalariados = sum(es_asalariado, na.rm = TRUE),
+    tasa_empleo = asalariados / total_personas
+  ) %>%
+  ungroup()
+
+# Filtrar datos para asegurarse que todas las comunas tienen información
+tasa_empleo <- tasa_empleo %>% filter(total_personas > 0)
+print(tasa_empleo)
+#-------------------------------------------------------------------------------
+# Verificar tamaño de las muestras por generación
+table(datos_filtrados$generacion)
+
+# Test de homocedasticidad
+leveneTest(tasa_empleo ~ generacion, data = tasa_empleo)
+#-------------------------------------------------------------------------------
+# ANOVA para tasas de empleo por generación
+anova_model <- aov(tasa_empleo ~ generacion, data = tasa_empleo)
+summary(anova_model)
+
+#-------------------------------------------------------------------------------
+# Media general de las tasas de empleo
+media_global <- mean(tasa_empleo$tasa_empleo)
+
+# Crear un conjunto de datos desplazados
+tasa_empleo_desplazada <- tasa_empleo %>%
+  mutate(tasa_empleo_desplazada = tasa_empleo - mean(tasa_empleo) + media_global)
+#-------------------------------------------------------------------------------
+# Función para calcular el estadístico F
+calcular_f <- function(data) {
+  modelo <- aov(tasa_empleo ~ generacion, data = data)
+  summary(modelo)[[1]]$`F value`[1]
+}
+
+# Generar distribuciones bootstrap
+set.seed(42)
+boot_f <- replicate(1000, {
+  datos_boot <- tasa_empleo_desplazada %>% 
+    group_by(generacion) %>%
+    sample_frac(size = 1, replace = TRUE)
+  calcular_f(datos_boot)
+})
+
+# Calcular el valor F observado
+f_observado <- calcular_f(tasa_empleo)
+
+# Calcular p-valor
+p_valor <- mean(boot_f >= f_observado)
+
+cat("F Observado:", f_observado, "\n")
+cat("P-valor:", p_valor, "\n")
+#-------------------------------------------------------------------------------
+ggplot(data.frame(F = boot_f), aes(x = F)) +
+  geom_histogram(binwidth = 0.1, fill = "blue", alpha = 0.7) +
+  geom_vline(xintercept = f_observado, color = "red", linetype = "dashed") +
+  labs(title = "Distribución Bootstrap del Estadístico F",
+       x = "F",
+       y = "Frecuencia")
+#-------------------------------------------------------------------------------
+# Función para comparaciones por pares bootstrap
+comparacion_pares <- function(grupo1, grupo2, n_resamples = 1000) {
+  diferencia_observada <- mean(grupo1) - mean(grupo2)
+  diffs <- replicate(n_resamples, {
+    resample1 <- sample(grupo1, length(grupo1), replace = TRUE)
+    resample2 <- sample(grupo2, length(grupo2), replace = TRUE)
+    mean(resample1) - mean(resample2)
+  })
+  p_valor <- mean(abs(diffs) >= abs(diferencia_observada))
+  list(diferencia_observada = diferencia_observada, p_valor = p_valor)
+}
+
+# Comparaciones por pares
+pares <- combn(unique(tasa_empleo$generacion), 2)
+resultados_posthoc <- apply(pares, 2, function(par) {
+  g1 <- tasa_empleo %>% filter(generacion == par[1]) %>% pull(tasa_empleo)
+  g2 <- tasa_empleo %>% filter(generacion == par[2]) %>% pull(tasa_empleo)
+  comparacion_pares(g1, g2)
+})
+
+# Nombres para las comparaciones
+names(resultados_posthoc) <- apply(pares, 2, paste, collapse = " vs ")
+
+# Mostrar resultados
+resultados_posthoc
+```
+**Con un p-valor de 0.699 y valores P de 0.508, 0.472 y 0.512 , no tenemos evidencia suficiente para rechazar la hipótesis nula (H₀), lo que sugiere que no hay evidencia significativa para afirmar que el rango etario (Gen X, Millennial, Gen Z) influye en la tasa de preferencia por trabajos asalariados en las comunas de la Región Metropolitana.**
+**Ademas no tenemos suficiente evidencia como para decir con un 95% de confianza, que las tasas de preferencia por trabajos asalariados entre los distintos grupos de edad son significativamente diferentes en las comunas de la región, al menos con los datos y el análisis realizados en este contexto.**
+

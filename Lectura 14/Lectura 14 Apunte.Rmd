@@ -1,0 +1,378 @@
+---
+title: "Lectura 14 Apunte"
+output: html_document
+---
+
+Script 14.1: Regresión Lineal Múltiple Básica
+Este script realiza una regresión lineal múltiple para predecir la potencia del motor usando el volumen de cilindros y peso del vehículo.
+
+```{r}
+library(dplyr)
+library(scatterplot3d)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5)
+
+# Ajustar modelo de RLM
+modelo <- lm(hp ~ disp + wt, data = datos)
+
+# Graficar modelo ajustado, diferencia valores sobre y bajo el plano
+i_color <- 1 + (resid(modelo) > 0)
+g <- scatterplot3d(
+  datos[["disp"]], datos[["wt"]], datos[["hp"]],
+  type = "p",
+  angle = 20,
+  pch = 16,
+  color = c("darkorange", "steelblue")[i_color],
+  xlab = bquote("Volumen útil de los cilindros" ~ group("[", "in"-3, "]")),
+  ylab = "Potencia [hp]",
+  zlab = "Peso [lb x 1000]"
+)
+g$plane3d(modelo, draw_lines = TRUE, lty = "dotted")
+
+# Definir valores para predicción
+disp <- c(246.54, 185.015, 317.097, 403.338, 325.263, 336.128, 
+          200.359, 327.478, 232.06, 382.015)
+wt <- c(3.307, 2.965, 3.699, 4.178, 3.744, 3.804, 
+        3.050, 3.756, 3.226, 4.059)
+datos_nuevos <- data.frame(disp, wt)
+
+# Predecir usando el modelo
+hp_est <- predict(modelo, newdata = datos_nuevos)
+datos_nuevos <- cbind(datos_nuevos, hp_est)
+cat("Predicciones:\n")
+print(datos_nuevos)
+
+```
+
+Script 14.2: Variables Artificiales
+Este script demuestra la creación de variables dummy para variables categóricas.
+
+
+```{r}
+library(dummy)
+
+# Crear matriz de datos
+persona <- 1:9
+sexo <- c("F", "F", "M", "M", "M", "M", "F", "M", "F")
+tipo <- c("B", "D", "A", "B", "A", "C", "D", "D", "D")
+valor <- c(1.68, 2.79, 1.92, 2.26, 2.1, 2.63, 2.19, 3.62, 2.76)
+datos <- data.frame(persona, sexo, tipo, valor)
+
+# Crear variables artificiales
+datos.dummy <- dummy(datos)
+datos.dummy[["sexo_F"]] <- NULL
+datos.dummy[["tipo_A"]] <- NULL
+datos.dummy[["valor"]] <- datos[["valor"]]
+
+# Crear modelos y comparar
+modelo <- lm(valor ~ sexo_M + tipo_B + tipo_C + tipo_D, datos.dummy)
+print(modelo)
+
+modelo_directo <- lm(valor ~ sexo + tipo, datos)
+print(modelo_directo)
+```
+
+
+Script 14.4: Regresión Jerárquica
+Este script implementa una regresión jerárquica para construir un modelo predictivo de la potencia del motor.
+
+```{r}
+library(dplyr)
+
+# Cargar y filtrar datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5) |>
+  mutate_at(c("cyl", "vs", "am", "gear", "carb"), as.factor)
+
+# Ajustar modelo inicial
+modelo_1 <- lm(hp ~ disp, data = datos)
+
+# Incorporar número de cilindros
+modelo_2 <- update(modelo_1, . ~ . + cyl)
+print(anova(modelo_1, modelo_2), signif.legend = FALSE)
+
+# Reemplazar cilindros por carburadores
+modelo_3 <- update(modelo_2, . ~ . - cyl + carb)
+print(anova(modelo_1, modelo_3), signif.legend = FALSE)
+
+# Reevaluar cilindros
+modelo_4 <- update(modelo_3, . ~ . + cyl)
+print(anova(modelo_3, modelo_4), signif.legend = FALSE)
+
+# Incorporar peso
+modelo_5 <- update(modelo_4, . ~ . + wt)
+print(anova(modelo_4, modelo_5), signif.legend = FALSE)
+
+# Reemplazar peso por tipo de motor
+modelo_6 <- update(modelo_5, . ~ . - wt + vs)
+print(anova(modelo_4, modelo_6), signif.legend = FALSE)
+
+# Mostrar modelo final
+print(summary(modelo_4), signif.legend = FALSE)
+```
+
+
+Script 14.5: Regresión Paso a Paso
+Este script implementa un proceso de selección de variables tanto hacia adelante como hacia atrás.
+
+```{r}
+library(dplyr)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5) |>
+  mutate_at(c("cyl", "vs", "am", "gear", "carb"), as.factor)
+
+# Ajustar modelo nulo y completo
+nulo <- lm(hp ~ 1, data = datos)
+completo <- lm(hp ~ ., data = datos)
+
+# Selección hacia adelante
+cat("Selección hacia adelante:\n")
+cat("----------------------\n\n")
+
+# Evaluar variables para incorporar
+paso <- add1(nulo, scope = completo, test = "F")
+print(paso, digits = 3, signif.legend = FALSE)
+
+# Agregar variable con mayor reducción de varianza
+modelo <- update(nulo, . ~ . + cyl)
+
+# Evaluar más variables para incorporar
+paso <- add1(modelo, scope = completo, test = "F")
+cat("\n")
+print(paso, digits = 3, signif.legend = FALSE)
+
+# Agregar siguiente variable
+modelo <- update(modelo, . ~ . + carb)
+
+# Mostrar coeficientes del modelo
+cat("\nModelo obtenido:\n")
+print(modelo[["coefficients"]])
+
+cat("\n\n")
+cat("Eliminación hacia atrás:\n")
+cat("----------------------\n\n")
+
+# Evaluar variables para eliminar
+paso <- drop1(completo, test = "F")
+print(paso, digits = 3, signif.legend = FALSE)
+
+# Quitar variable con menor estadístico F
+modelo <- update(completo, . ~ . - wt)
+
+# Evaluar más variables para eliminar
+paso <- drop1(modelo, test = "F")
+cat("\n")
+print(paso, digits = 3, signif.legend = FALSE)
+
+# Quitar siguiente variable
+modelo <- update(modelo, . ~ . - drat)
+
+# Mostrar coeficientes del modelo final
+cat("\nModelo obtenido:\n")
+print(modelo[["coefficients"]])
+```
+
+
+Proceso detallado:
+Inicia cargando los datos de mtcars y filtrando vehículos con peso entre 2000 y 5000 libras
+Convierte variables categóricas a factores
+Crea modelo nulo (solo intercepto) y completo (todas las variables)
+Realiza selección hacia adelante:
+Evalúa cada variable usando el estadístico F
+Agrega primero cyl (cilindros)
+Luego agrega carb (carburadores)
+Realiza eliminación hacia atrás:
+Comienza con modelo completo
+Elimina wt (peso) primero
+Luego elimina drat (relación del eje)
+Muestra los coeficientes de los modelos resultantes
+
+
+Script 14.6: Regresión Escalonada con BIC
+Este script implementa una regresión paso a paso usando el criterio BIC.
+
+```{r}
+library(dplyr)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5) |>
+  mutate_at(c("cyl", "vs", "am", "gear", "carb"), as.factor)
+
+# Ajustar modelos nulo y completo
+nulo <- lm(hp ~ 1, data = datos)
+completo <- lm(hp ~ ., data = datos)
+
+# Realiza regresión escalonada usando el menor BIC
+# como criterio (aunque se reporta como AIC), bajando
+# (temporalmente) el número de cifras significativas
+# y el ancho máximo de la pantalla al imprimir
+opt <- options(digits = 2, width = 54)
+modelo <- step(nulo, 
+              scope = list(lower = nulo, upper = completo),
+              direction = "both", 
+              k = log(nrow(datos)),
+              test = "F", 
+              trace = 1)
+options(digits = opt[[1]], width = opt[[2]])
+
+# Mostrar los coeficientes del modelo conseguido
+cat("\nModelo obtenido:\n")
+print(modelo[["coefficients"]])
+```
+
+Características principales:
+Utiliza el criterio BIC para selección de variables
+Permite tanto agregar como eliminar variables en cada paso
+El parámetro k = log(n) especifica el uso de BIC en lugar de AIC
+Ajusta temporalmente el formato de salida para mejor visualización
+Combina los enfoques forward y backward en un solo proceso
+El proceso continúa hasta que no hay mejoras significativas en el modelo según el criterio BIC
+
+
+Script 14.7: Búsqueda Exhaustiva
+Este script implementa una búsqueda exhaustiva de todas las posibles combinaciones de predictores para construir un modelo de regresión lineal múltiple.
+
+```{r}
+library(dplyr)
+library(leaps)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5) |>
+  mutate_at(c("cyl", "vs", "am", "gear", "carb"), as.factor)
+
+# Evaluar todas las combinaciones
+combinaciones <- regsubsets(hp ~ ., 
+                          data = datos,
+                          nbest = 1, 
+                          nvmax = 16,
+                          method = "exhaustive")
+
+# Graficar los resultados
+plot(combinaciones)
+
+# Extraer los mejores subconjuntos
+comb_summary <- summary(combinaciones)
+i_min_bic <- which.min(comb_summary[["bic"]])
+i_max_r2a <- which.max(comb_summary[["adjr2"]])
+
+mejor_comb_bic <- comb_summary[["which"]][i_min_bic, ]
+mejor_comb_r2a <- comb_summary[["which"]][i_max_r2a, ]
+
+# Extraer las variables seleccionadas
+comb_mejor_bic <- names(mejor_comb_bic[mejor_comb_bic == TRUE])
+comb_mejor_r2a <- names(mejor_comb_r2a[mejor_comb_r2a == TRUE])
+
+# Eliminar variables indicadoras
+nombres_mejor_bic <- unique(gsub("^(.*)\\d$", "\\1", comb_mejor_bic))
+nombres_mejor_r2a <- unique(gsub("^(.*)\\d$", "\\1", comb_mejor_r2a))
+
+# Obtener las fórmulas
+pred_mejor_bic <- paste(nombres_mejor_bic[-1], collapse = " + ")
+pred_mejor_r2a <- paste(nombres_mejor_r2a[-1], collapse = " + ")
+
+fmla_mejor_bic <- as.formula(paste("hp", pred_mejor_bic, sep = " ~ "))
+fmla_mejor_r2a <- as.formula(paste("hp", pred_mejor_r2a, sep = " ~ "))
+
+# Construir y mostrar los mejores modelos
+modelo_mejor_bic <- lm(fmla_mejor_bic, data = datos)
+modelo_mejor_r2a <- lm(fmla_mejor_r2a, data = datos)
+
+cat("Modelo que minimiza el BIC:\n")
+cat("-------------------------\n")
+print(modelo_mejor_bic)
+cat("\n")
+cat("Modelo que maximiza el coeficiente de determinación ajustado:\n")
+cat("-------------------------------------------------------\n")
+print(modelo_mejor_r2a)
+```
+
+Proceso detallado:
+Carga los datos y convierte variables categóricas a factores
+Realiza búsqueda exhaustiva de todas las combinaciones posibles de predictores
+Evalúa cada modelo usando BIC y R² ajustado
+Extrae las mejores combinaciones según ambos criterios
+Procesa las variables indicadoras para reconstruir los predictores categóricos completos
+Construye y muestra los modelos finales optimizados
+
+
+Script 14.8: Validación Cruzada y Evaluación de Modelos
+
+```{r}
+library(caret)
+library(dplyr)
+
+# Cargar y filtrar los datos
+datos <- mtcars |> 
+  filter(wt > 2 & wt < 5) |>
+  mutate_at(c("cyl", "vs", "am", "gear", "carb"), as.factor)
+
+# Imprimir mensajes de advertencia a medida que ocurre
+opt <- options(warn = 1)
+
+# Ajustar y mostrar el modelo usando validación cruzada
+# dejando uno fuera
+fmla <- formula("hp ~ mpg + cyl + disp + drat + qsec + vs + am + gear + carb")
+entrenamiento <- train(fmla, 
+                      data = datos,
+                      method = "lm",
+                      trControl = trainControl(method = "LOOCV"))
+
+# Mostrar la fórmula y las predicciones del modelo
+cat("\n")
+print(fmla)
+cat("\n")
+
+cat("Predicciones en cada pliegue:\n")
+print(entrenamiento[["pred"]])
+
+cat("Error estimado para el modelo:\n")
+print(entrenamiento[["results"]])
+
+cat("\nModelo con un predictor menos:\n")
+cat("--------------------------------\n\n")
+
+# Ajustar y mostrar el modelo usando validación cruzada
+# dejando uno fuera sin la variable "carb"
+set.seed(111)
+fmla <- formula("hp ~ mpg + cyl + disp + drat + qsec + vs + am + gear")
+entrenamiento <- train(fmla, 
+                      data = datos,
+                      method = "lm",
+                      trControl = trainControl(method = "LOOCV"))
+
+# Mostrar la fórmula y las predicciones del modelo modificado
+print(fmla)
+cat("\n")
+
+cat("Predicciones en cada pliegue:\n")
+print(entrenamiento[["pred"]])
+
+# Mostrar el resultado estimado para el modelo
+cat("\nError estimado para el modelo:\n")
+print(entrenamiento[["results"]])
+
+# Reestable opción para warnings
+options(warn = opt[[1]])
+```
+
+
+Características principales:
+Utiliza validación cruzada dejando uno fuera (LOOCV)
+Compara dos modelos:
+Modelo completo con todas las variables predictoras
+Modelo reducido sin la variable "carb" (número de carburadores)
+Evalúa el rendimiento predictivo de cada modelo
+Permite determinar si la variable "carb" es relevante para las predicciones
+Proceso de validación:
+Para cada observación:
+La excluye del conjunto de entrenamiento
+Ajusta el modelo con las observaciones restantes
+Predice el valor para la observación excluida
+Calcula métricas de error para evaluar la precisión de las predicciones
+Compara los errores entre ambos modelos para determinar cuál tiene mejor capacidad predictiva

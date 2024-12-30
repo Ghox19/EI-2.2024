@@ -1,0 +1,530 @@
+---
+title: "EP10"
+author: "Grupo 8"
+date: "2024-12-10"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+---
+
+Para este ejercicio usaremos los datos de medidas anatómicas recolectados por Heinz et al. (2003) que ya conocimos en el ejercicio práctico anterior (disponibles en el archivo "EP09 Datos.csv"). Como en este caso se requiere de una variable dicotómica, vamos a realizar lo siguiente:
+
+1.- El equipo creará la variable IMC (índice de masa corporal) como el peso de una persona (en kilogramos) dividido por el cuadrado de su estatura (en metros).
+2.- Si bien esta variable se usa para clasificar a las personas en varias clases de estado nutricional (bajo peso, normal, sobrepeso, obesidad, obesidad mórbida), para efectos de este ejercicio, usaremos dos clases: sobrepeso (IMC ≥ 23,2) y no sobrepeso (IMC < 23,2).
+3.- El equipo creará la variable dicotómica EN (estado nutricional) de acuerdo al valor de IMC de cada persona.
+
+## 1. Configuración inicial y definición de semilla
+
+La semilla a utilizar corresponde a los últimos cuatro dígitos del RUN (sin considerar el dígito verificador) del integrante de mayor edad del equipo.
+
+```{r}
+#Realizamos la lectura de los datos.
+
+datos <- read.csv2("EP09 Datos.csv")
+
+#Definimos la semilla a utilizar
+
+set.seed(6887)
+```
+
+## 2. Selección y preparación de la muestra
+
+Seleccionamos una muestra de 150 hombres (ya que la semilla es impar), asegurando que la mitad tenga estado nutricional "sobrepeso" y la otra mitad "no sobrepeso". Dividimos esta muestra en:
+- 100 personas (50 con EN "sobrepeso") para la construcción de los modelos (entrenamiento)
+- 50 personas (25 con EN "sobrepeso") para la evaluación de los modelos (prueba)
+
+```{r}
+# Librerias a utilizar
+library(caret) 
+library(dplyr) 
+library(ggpubr)
+library(pROC)
+library(car)  
+
+#Primero creamos la variable IMC para cada persona
+#Añadimos la nueva columna IMC a la tabla de datos usando mutate
+
+# Convertimos la altura de centímetros a metros
+datos <- datos %>% mutate(Height = Height / 100)
+
+# Calculamos el IMC 
+datos <- datos %>% mutate(IMC = Weight / (Height^2))
+
+#Segundo creamos la variable EN para cada persona
+datos <- datos %>% mutate(EN = ifelse(IMC >= 23.2, "sobrepeso", "no sobrepeso"))
+
+#Seleccionamos la muestra de 150 hombres.
+muestra_sobrepeso <- datos %>% filter(Gender == 1 & EN == "sobrepeso") %>% sample_n(75, replace = FALSE)
+muestra_no_sobrepeso <- datos %>% filter(Gender == 1 & EN == "no sobrepeso") %>% sample_n(75, replace = FALSE)
+
+#Seleccionamos 50 personas sobrepeso y 50 personas no sobrepeso para construir los modelos. 
+
+muestra_sobrepeso_modelo <- muestra_sobrepeso[1:50,]
+muestra_no_sobrepeso_modelo <- muestra_no_sobrepeso[1:50,]
+
+#Seleccionamos 25 personas sobre peso y 25 personas no sobre peso para evaluar los modelos.
+
+muestra_sobrepeso_evaluar <- muestra_sobrepeso[51:75,]
+muestra_no_sobrepeso_evaluar <- muestra_no_sobrepeso[51:75,]
+
+# Combinar los conjuntos de entrenamiento y estandarizar variables
+muestra_entrenamiento <- bind_rows(muestra_sobrepeso_modelo, muestra_no_sobrepeso_modelo) %>%
+    mutate(EN = factor(EN, levels = c("no sobrepeso", "sobrepeso")),
+           Waist_std = scale(Waist.Girth),
+           Knees_std = scale(Knees.diameter))
+
+# Combinar los conjuntos de prueba y estandarizar variables
+muestra_prueba <- bind_rows(muestra_sobrepeso_evaluar, muestra_no_sobrepeso_evaluar) %>%
+    mutate(EN = factor(EN, levels = c("no sobrepeso", "sobrepeso")),
+           Waist_std = scale(Waist.Girth),
+           Knees_std = scale(Knees.diameter))
+
+
+```
+
+## 3. Variables predictoras del ejercicio anterior
+
+Recordamos las ocho variables predictoras seleccionadas aleatoriamente en el ejercicio anterior.
+
+```{r}
+nombres_variables <- c("Knees.diameter", "Gender", "Chest.Girth", 
+                      "Ankle.Minimum.Girth", "Age", 
+                      "Navel.Girth", "Hip.Girth", 
+                      "Elbows.diameter")
+
+
+```
+
+## 4. Selección de variable adicional para predicción
+
+Para predecir el estado nutricional (EN), seleccionamos la variable Waist Girth (circunferencia de la cintura) debido a su relevancia clínica. La literatura científica respalda que la circunferencia de cintura es un indicador confiable para evaluar la distribución de grasa corporal y puede ayudar a identificar la obesidad, existiendo una correlación positiva entre esta medida y el IMC.
+
+Referencias:
+- https://scielo.isciii.es/scielo.php?script=sci_arttext&pid=S0212-16112010000900009    
+- https://ojs.unemi.edu.ec/index.php/facsalud-unemi/article/view/1463  
+
+```{r}
+# Obtenemos los nombres de todas las columnas en el conjunto de datos original
+nombres_completos <- names(datos)
+
+# Identificamos las variables restantes
+variables_restantes <- setdiff(nombres_completos, nombres_variables)
+
+#por si hay que quitar height y weight igual que en EP09
+#variables_restantes <- setdiff(variables_restantes, c("Height", "Weight"))
+
+# Como queremos predecir estas variables, deberiamos quitarlas del conjunto de datos
+variables_restantes <- setdiff(variables_restantes, c("EN", "IMC"))
+
+
+# Creamos un arreglo que tenga las variables restantes del conjunto de datos original
+datos_restantes <- datos[, variables_restantes]
+
+
+
+variables_restantes
+```
+
+## 5. Construcción del modelo de regresión logística
+
+Usando el entorno R, construimos un modelo de regresión logística con el predictor seleccionado en el paso anterior y utilizando la muestra obtenida.
+
+```{r}
+# Preparar los datos de entrenamiento
+muestra_entrenamiento <- muestra_entrenamiento %>%
+    mutate(EN = factor(EN, levels = c("no sobrepeso", "sobrepeso")),
+           Waist_std = scale(Waist.Girth))
+
+# Colocamos nuestra semilla
+set.seed(6887)
+
+#Ajustar modelo, colocando logit indicando que es regresión logística.
+modelo <- glm(EN ~ Waist_std, family = binomial(link = "logit"), 
+              data = muestra_entrenamiento)
+
+print(summary(modelo))
+
+#Evaluar el modelo con el conjunto de entrenamiento.
+probs_ent <- fitted(modelo)
+
+# Graficar curva ROC, indicando AUC obtenido.
+ROC_ent <- roc(muestra_entrenamiento[["EN"]], probs_ent) 
+texto_ent <- sprintf("AUC = %.2f", ROC_ent[["auc"]])
+g_roc_ent <- ggroc(ROC_ent, color = 2)
+g_roc_ent <- g_roc_ent + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), 
+                                     linetype = "dashed")
+g_roc_ent <- g_roc_ent + annotate("text", x = 0.3, y = 0.3, label = texto_ent)
+g_roc_ent <- g_roc_ent + theme_pubr()
+print(g_roc_ent)
+
+#Obtener las predicciones.
+umbral <- 0.5
+preds_ent <- sapply(probs_ent,
+                    function(p) ifelse(p >= umbral, "sobrepeso", "no sobrepeso")) 
+preds_ent <- factor(preds_ent, levels = c("no sobrepeso", "sobrepeso"))
+
+# Obtener y mostrar estadísticas de clasificación en datos de entrenamiento. 
+mat_conf_ent <- confusionMatrix(preds_ent, muestra_entrenamiento[["EN"]],
+                               positive = "sobrepeso")
+cat("\n\nEvaluación del modelo (cjto. de entrenamiento): \n")
+cat("-----------------\n")
+print(mat_conf_ent[["table"]])
+cat ("\n")
+cat(sprintf(" Exactitud: %.3f\n", mat_conf_ent[["overall"]]["Accuracy"]))
+cat(sprintf(" Sensibilidad: %.3f\n", mat_conf_ent[["byClass"]]["Sensitivity"]))
+cat(sprintf("Especificidad: %.3f\n", mat_conf_ent[["byClass"]]["Specificity"]))
+
+# Evaluar el modelo con el conjunto de prueba
+# Preparar datos de prueba
+muestra_prueba <- muestra_prueba %>%
+    mutate(EN = factor(EN, levels = c("no sobrepeso", "sobrepeso")),
+           Waist_std = scale(Waist.Girth))
+
+probs_pru <- predict(modelo, muestra_prueba, type = "response")
+
+# Graficar curva ROC, indicando AUC obtenido.
+ROC_pru <- roc(muestra_prueba[["EN"]], probs_pru)
+texto_pru <- sprintf("AUC = %.2f", ROC_pru[["auc"]]) 
+g_roc_pru <- ggroc(ROC_pru, color = 2)
+g_roc_pru <- g_roc_pru + geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1),
+                                     linetype = "dashed")
+g_roc_pru <- g_roc_pru + annotate("text", x = 0.3, y = 0.3, label = texto_pru)
+g_roc_pru <- g_roc_pru + theme_pubr()
+print(g_roc_pru)
+
+# Obtener las predicciones (con el mismo umbral). 
+preds_pru <- sapply(probs_pru,
+                    function(p) ifelse(p >= umbral, "sobrepeso", "no sobrepeso")) 
+preds_pru <- factor(preds_pru, levels = c("no sobrepeso", "sobrepeso"))
+
+# Obtener y mostrar estadísticas de clasificación en datos de prueba. 
+mat_conf_pru <- confusionMatrix(preds_pru, muestra_prueba[["EN"]],
+                               positive = "sobrepeso")
+cat("\n\nEvaluación del modelo (cjto. de prueba): \n")
+cat("------------\n")
+print(mat_conf_pru[["table"]])
+cat("\n")
+cat(sprintf(" Exactitud: %.3f\n", mat_conf_pru[["overall"]]["Accuracy"]))
+cat(sprintf(" Sensibilidad: %.3f\n", mat_conf_pru[["byClass"]]["Sensitivity"]))
+cat(sprintf("Especificidad: %.3f\n", mat_conf_pru[["byClass"]]["Specificity"]))
+
+# Evaluar la linealidad entre predictor y respuesta transformada
+datos_lin <- muestra_entrenamiento %>%
+    select(Waist_std) %>%
+    mutate(Logit = log(fitted(modelo)/(1-fitted(modelo))))
+
+p_lin <- ggscatter(datos_lin, x = "Waist_std", y = "Logit",
+                   add = "reg.line", add.params = list(color = "blue"))
+p_lin <- p_lin + labs(x = "Circunferencia de cintura (estandarizada)", 
+                     y = "Logit (EN)")
+print(p_lin)
+
+# Evaluar independencia de residuos
+dwtest <- durbinWatsonTest(modelo)
+cat("\nPrueba de independencia de residuos:\n")
+print(dwtest)
+
+# Evaluar normalidad de residuos
+residuos_estand <- rstandard(modelo)
+qqnorm(residuos_estand)
+qqline(residuos_estand)
+
+# Identificar casos influyentes
+infl <- influence.measures(modelo)
+casos_influyentes <- which(apply(infl$is.inf, 1, any))
+cat("\nCasos influyentes:\n")
+print(rownames(infl$infmat)[casos_influyentes])
+
+```
+
+Se desarrolló un modelo de regresión logística utilizando el estado nutricional (EN) como variable dependiente y la circunferencia de cintura (Waist.Girth) como variable independiente. El modelo mostró los siguientes resultados:
+En el conjunto de entrenamiento (n=100):
+
+De las personas con "no sobrepeso", el modelo clasificó correctamente a 38 personas y erróneamente a 12
+De las personas con "sobrepeso", el modelo clasificó correctamente a 38 personas y erróneamente a 12
+El modelo alcanzó una exactitud global del 76% en estos datos
+
+En el conjunto de prueba (n=50):
+
+De las personas con "no sobrepeso", el modelo clasificó correctamente a 23 personas y erróneamente a 5
+De las personas con "sobrepeso", el modelo clasificó correctamente a 20 personas y erróneamente a 2
+El modelo mantuvo un buen rendimiento con una exactitud del 86% en datos no vistos
+
+Estos resultados sugieren que el modelo es robusto, ya que mantiene un rendimiento similar tanto en datos de entrenamiento como de prueba, con una ligera mejora en los datos de prueba.
+
+## 6. Exploración de modelos con múltiples predictores
+
+Usando herramientas para la exploración de modelos del entorno R, buscamos entre dos y cinco predictores de entre las variables seleccionadas al azar, recordadas en el punto 3, para agregar al modelo obtenido en el paso 5.
+
+```{r}
+# Partimos del modelo base que ya tiene Waist.Girth
+modelo_base <- modelo
+
+# Recordamos las 8 variables seleccionadas anteriormente
+variables_seleccionadas <- c("Knees.diameter", "Gender", "Chest.Girth", 
+                            "Ankle.Minimum.Girth", "Age", 
+                            "Navel.Girth", "Hip.Girth", 
+                            "Elbows.diameter")
+
+# Evaluación de modelos con dos predictores
+cat("Evaluando modelos con dos predictores (Waist.Girth + otro):\n")
+cat("------------------------------------------------\n")
+for(var in variables_seleccionadas) {
+    formula <- paste("EN ~ Waist.Girth +", var)
+    modelo_temp <- glm(formula, family = binomial(link = "logit"), 
+                      data = muestra_entrenamiento)
+    cat("\nModelo con", var, ":\n")
+    cat("AIC:", AIC(modelo_temp), "\n")
+    cat("Devianza:", modelo_temp$deviance, "\n")
+}
+
+# Seleccionamos el mejor modelo de dos predictores
+modelo_2pred <- glm(EN ~ Waist.Girth + Hip.Girth, 
+                   family = binomial(link = "logit"), 
+                   data = muestra_entrenamiento)
+
+# Evaluación de modelos con tres predictores
+cat("\nEvaluando modelos con tres predictores:\n")
+cat("------------------------------------\n")
+for(var in setdiff(variables_seleccionadas, "Hip.Girth")) {
+    formula <- paste("EN ~ Waist.Girth + Hip.Girth +", var)
+    modelo_temp <- glm(formula, family = binomial(link = "logit"), 
+                      data = muestra_entrenamiento)
+    cat("\nAgregando", var, ":\n")
+    cat("AIC:", AIC(modelo_temp), "\n")
+    cat("Devianza:", modelo_temp$deviance, "\n")
+}
+
+# Seleccionamos el mejor modelo de tres predictores
+modelo_3pred <- glm(EN ~ Waist.Girth + Hip.Girth + Knees.diameter, 
+                   family = binomial(link = "logit"), 
+                   data = muestra_entrenamiento)
+
+# Evaluación de modelos con cuatro predictores
+cat("\nEvaluando modelos con cuatro predictores:\n")
+cat("-------------------------------------\n")
+variables_restantes <- setdiff(variables_seleccionadas, c("Hip.Girth", "Knees.diameter"))
+for(var in variables_restantes) {
+    formula <- paste("EN ~ Waist.Girth + Hip.Girth + Knees.diameter +", var)
+    modelo_temp <- glm(formula, family = binomial(link = "logit"), 
+                      data = muestra_entrenamiento)
+    cat("\nAgregando", var, ":\n")
+    cat("AIC:", AIC(modelo_temp), "\n")
+    cat("Devianza:", modelo_temp$deviance, "\n")
+}
+
+# Comparación formal de modelos
+cat("\nComparación de modelos:\n")
+cat("----------------------\n")
+print(anova(modelo_base, modelo_2pred, modelo_3pred, test = "Chisq"))
+
+# Evaluación de multicolinealidad para cada modelo
+cat("\nFactores de inflación de varianza - Modelo 2 predictores:\n")
+print(vif(modelo_2pred))
+
+cat("\nFactores de inflación de varianza - Modelo 3 predictores:\n")
+print(vif(modelo_3pred))
+
+# Resumen del modelo seleccionado
+cat("\nResumen del modelo seleccionado:\n")
+cat("-----------------------------\n")
+print(summary(modelo_3pred))
+
+  
+```
+#Eleccion del modelo:
+```{r}
+# Conclusión del análisis de selección de predictores:
+#
+# 1. Proceso de selección sistemática:
+#    - Se evaluaron combinaciones de predictores con las variables seleccionadas
+#    - Se analizaron modelos con 2, 3 y 4 predictores partiendo de Waist.Girth
+#    - Se utilizó AIC, devianza y significancia estadística como criterios
+#
+# 2. Resultados del modelo inicial:
+#    - El modelo incluía Waist.Girth, Hip.Girth y Knees.diameter
+#    - Waist.Girth era significativo (p=0.0064)
+#    - Knees.diameter era significativo (p=0.0337)
+#    - Hip.Girth no resultó significativo (p=0.4625)
+#    - AIC = 93.249
+#    - Devianza se redujo de 138.629 a 85.249
+#
+# 3. Modelo final parsimonioso:
+#    - Se eliminó Hip.Girth por no ser significativo
+#    - El nuevo modelo incluye solo Waist.Girth y Knees.diameter
+#    - Waist.Girth mejoró su significancia (p=5.95e-06)
+#    - Knees.diameter mantuvo significancia (p=0.00642)
+#    - AIC mejoró a 91.805
+#    - Devianza residual: 85.805
+#    - El modelo más simple mantiene buen poder explicativo
+
+modelo_final <- glm(EN ~ Waist.Girth + Knees.diameter, 
+                   family = binomial(link = "logit"), 
+                   data = muestra_entrenamiento)
+
+print(summary(modelo_final))
+```
+
+## 7. Evaluación de la confiabilidad de los modelos
+
+Evaluamos la confiabilidad de los modelos (i.e. que tengan un buen nivel de ajuste y sean generalizables) y los "arreglamos" en caso de que tengan algún problema.
+
+#### Primero se verifica el modelo de una variable predictora
+```{r}
+
+# Verificación de relación lineal entre variable predictora y respuesta transformada
+residualPlots(modelo, fitted=FALSE)
+crPlots(modelo)
+```
+
+El análisis gráfico y la prueba de curvatura indican que el supuesto de linealidad se cumple.
+
+```{r}
+# Verificación de independencia entre residuos
+durbinWatson <- durbinWatsonTest(modelo)
+cat("PRUEBA DE DURBIN WATSON\n\n")
+print(durbinWatson)
+```
+
+```{r}
+# Interpretación del test Durbin-Watson:
+# H0: No hay autocorrelación vs H1: Existe autocorrelación
+# DW cercano a 2 indica no autocorrelación
+# DW < 2 sugiere autocorrelación positiva
+# DW > 2 sugiere autocorrelación negativa
+cat("\nInterpretación del estadístico DW:", "\n")
+cat("Valor DW:", round(durbinWatson$dw, 3), "\n")
+cat("Autocorrelación:", round(durbinWatson$r, 3), "\n")
+cat("Conclusión:", ifelse(durbinWatson$p > 0.05, 
+    "No hay evidencia de autocorrelación", 
+    "Existe evidencia de autocorrelación"), "\n")
+```
+
+Para verificar si hay información incompleta, se está evaluando un modelo con un predictor numérico, por lo que se necesitan como mínimo 15 observaciones. En este caso, el modelo se generó con 100, por lo que no hay información incompleta.
+
+```{r}
+# Calcular valores críticos para casos influyentes
+n <- nrow(modelo$data)
+k <- length(coef(modelo)) - 1  # número de predictores
+h_medio <- (k + 1)/n
+h_critico <- 2 * h_medio
+d_cook_critico <- 4/n
+
+cat("\nValores críticos para diagnóstico:", "\n")
+cat("Apalancamiento medio (h):", round(h_medio, 3), "\n")
+cat("Apalancamiento crítico (2h):", round(h_critico, 3), "\n")
+cat("Distancia de Cook crítica:", round(d_cook_critico, 3), "\n")
+```
+
+```{r}
+# Verificación de dominancia de casos influyentes
+influence_plot <- influencePlot(modelo)
+print(influence_plot)
+```
+
+Por último, para la condición de casos influyentes, ningún grupo supera dos veces el nivel de apalancamiento promedio, y solamente dos observaciones superan el umbral 4/100 para la distancia de Cook, sin embargo ninguno supera el nivel crítico.
+
+#### Se verifica el modelo de múltiples variables predictoras
+
+```{r}
+
+# Verificación de relación lineal entre variable predictora y respuesta transformada
+residualPlots(modelo_final, fitted=FALSE)
+crPlots(modelo_final)
+```
+
+El análisis gráfico y la prueba de curvatura indican que el supuesto de linealidad se cumple.
+
+```{r}
+# Verificación de independencia entre residuos
+durbinWatson <- durbinWatsonTest(modelo_final)
+cat("PRUEBA DE DURBIN WATSON\n\n")
+print(durbinWatson)
+```
+
+
+
+```{r}
+vif(modelo_final)
+```
+
+Al revisar si existe multicolinealidad fuerte, se reportan valores iguales (1.011), que además son inferiores a tres, por lo que no deberían ser problemáticos.
+
+
+Para verificar si hay información incompleta, se está evaluando un modelo con dos predictores numéricos, por lo que se necesitan como mínimo 30 observaciones. En este caso, el modelo se generó con 100, por lo que no hay información incompleta.
+
+```{r}
+# Verificación de dominancia de casos influyentes
+influence_plot <- influencePlot(modelo_final)
+print(influence_plot)
+```
+
+En este caso, hay tres observaciones que superan más de dos veces el promedio de apalancamiento, y también hay tres observaciones que superan el umbral de distancia de Cook (4/100), sin embargo, ninguno se acerca al valor crítico.
+
+## 8. Evaluación del poder predictivo de los modelos
+
+Usando código estándar, evaluamos el poder predictivo de los modelos con los datos de las 50 personas que no se incluyeron en su construcción en términos de sensibilidad y especificidad.
+
+#### Modelo de un predictor
+
+```{r}
+# Realizar predicciones sobre el conjunto de prueba
+predicciones <- predict(modelo, muestra_prueba, type = "response")
+# Asumimos que el umbral para clasificar como positivo es 0.5
+predicciones_clasificadas <- ifelse(predicciones > 0.5, 1, 0)
+
+# Crear la matriz de confusión
+tabla_confusion <- table(predicciones_clasificadas, muestra_prueba$EN)
+print(tabla_confusion)
+
+# Extraer los valores de la matriz de confusión
+TP <- tabla_confusion[2, 2]  # Verdaderos positivos
+TN <- tabla_confusion[1, 1]  # Verdaderos negativos
+FP <- tabla_confusion[1, 2]  # Falsos positivos
+FN <- tabla_confusion[2, 1]  # Falsos negativos
+
+# Calcular sensibilidad y especificidad
+sensibilidad <- TP / (TP + FN)
+especificidad <- TN / (TN + FP)
+precision <- TP/(TP + FP)
+f1_score <- 2 * (precision * sensibilidad)/(precision + sensibilidad)
+accuracy <- (TP + TN)/(TP + TN + FP + FN)
+
+# Mostrar los resultados
+cat("Sensibilidad:", sensibilidad, "\n")
+cat("Especificidad:", especificidad, "\n")
+cat("\nMétricas adicionales:", "\n")
+cat("Precisión:", round(precision, 3), "\n")
+cat("F1-Score:", round(f1_score, 3), "\n")
+cat("Exactitud:", round(accuracy, 3), "\n")
+
+```
+
+#### Modelo de múltiples predictores
+```{r}
+# Realizar predicciones sobre el conjunto de prueba
+predicciones <- predict(modelo_final, muestra_prueba, type = "response")
+# Asumimos que el umbral para clasificar como positivo es 0.5
+predicciones_clasificadas <- ifelse(predicciones > 0.5, 1, 0)
+
+# Crear la matriz de confusión
+tabla_confusion <- table(predicciones_clasificadas, muestra_prueba$EN)
+print(tabla_confusion)
+
+# Extraer los valores de la matriz de confusión
+TP <- tabla_confusion[2, 2]  # Verdaderos positivos
+TN <- tabla_confusion[1, 1]  # Verdaderos negativos
+FP <- tabla_confusion[1, 2]  # Falsos positivos
+FN <- tabla_confusion[2, 1]  # Falsos negativos
+
+# Calcular sensibilidad y especificidad
+sensibilidad <- TP / (TP + FN)
+especificidad <- TN / (TN + FP)
+
+# Mostrar los resultados
+cat("Sensibilidad:", sensibilidad, "\n")
+cat("Especificidad:", especificidad, "\n")
+
+```
+
+A partir de los datos obtenidos, existen diferencias leves en los dos modelos, sin embargo el de múltiples variables es mejor en términos de especificidad. En caso de buscar minimizar tanto los falsos negativos como los falsos positivos, lo ideal sería utilizar el modelo multi-variable. Sin embargo, si lo que se necesita es optimizar el uso de recursos computacionales, el modelo de una variable es suficientemente bueno para ser utilizado.

@@ -126,15 +126,40 @@ print(g_efecto)
 
 ## Pregunta 2
 
+#Para la pregunta solicitada, se deben analizar los efectos en las mujeres que usan el placebo en diferentes momentos (3 meses y 6 meses de uso),
+#comparando su percepción del efecto del producto. Hay que recordar que medida de percepción está en una escala de Likert, la cual no posee
+#intervalos iguales entre sus valores, por lo que las pruebas típicas no serán suficientes. Adicionalmente, como se
+#está comparando la percepción en las mismas mujeres, pero en distintos tiempos totales de uso del producto, las
+#muestras se encuentran correlacionadas.
+
 datos_filtradosP2 <- datos %>% filter(SEXO == "F") %>% filter(SHAMPOO == "Placebo") %>% select(ID, SEXO, SHAMPOO, PERCEPCION_3, PERCEPCION_6)
 
 head(datos_filtradosP2)
 
+#Debido a estos antecedentes, la prueba preliminarmente escogida es la prueba de rangos con signo del Wilcoxon.
+#La prueba normal no sería indicada, pues las muestras no son independientes.
+
+#Para esta prueba, se deben cumplir dos condiciones principales:
+# - Las observaciones de la muestras deben provenir de una muestra independiente, y deben estar 
+# correlacionadas: Como se mencionó anteriormente, por la naturaleza del estudio, esta condición ya está verificada
+
+# - La escala de medida debe ser por lo menos, ordinal. En este caso, como la medida es una escala de Likert, 
+# se puede determinar una jerarquía en los puntajes.
+
+# Para la prueba se determinan las siguientes hipótesis:
+# - HO: Las mujeres sienten una diferencia significativa entre los 3 y 6 meses de utilizar un shampoo placebo
+# - HA: Las mujeres no sienten una diferencia significativa entre los 3 y 6 meses de utilizar un shampoo placebo
+
 alfa <- 0.05
 
-# Hacer la prueba de Mann-Whitney.
+# Hacer la prueba de wilcoxon de signos
 prueba <- wilcox.test(datos_filtradosP2$PERCEPCION_3, datos_filtradosP2$PERCEPCION_6,paired = TRUE, alternative = "two.sided", conf.level = 1 - alfa)
 print(prueba)
 
+
+# A partir de la prueba seleccionada, con un nivel de significancia de 0.05, y un p-valor mucho más alto que el
+# alfa seleccionado, no se logra rechazar la hipótesis nula, concluyendo con un 95% de confianza que no existe
+# suficiente evidencia para demostrar que las mujeres sienten una diferencia significativa entre los tres y seis meses
+# de utilizar el producto placebo. 
 
 
